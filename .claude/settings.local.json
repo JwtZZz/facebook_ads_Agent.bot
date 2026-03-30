@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python main.py)",
+      "Bash(python -X utf8 main.py)",
+      "Bash(pip install:*)",
+      "Bash(start \"TelegramBot\" python -X utf8 main.py)",
+      "Bash(cmd.exe /c \"start python -X utf8 main.py\")",
+      "Bash(uv init:*)",
+      "Bash(uv add:*)",
+      "Read(//c/Users/Administrator/Desktop/**)",
+      "Bash(pandoc \"FB学习.docx\" -t plain)",
+      "Bash(pandoc \"FB学习.docx\" -o /tmp/fb_output.md)",
+      "Read(//tmp/**)",
+      "Bash(where pandoc:*)",
+      "Bash(python -c \":*)",
+      "WebSearch"
+    ]
+  }
+}
