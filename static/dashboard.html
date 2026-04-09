@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>广告监控面板</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#f5f5f5; color:#333; font-family:'Microsoft YaHei','PingFang SC',sans-serif; padding:20px; }
+
+.header { background:#fff; padding:16px 24px; border-radius:8px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center; box-shadow:0 1px 3px rgba(0,0,0,0.1); }
+.header h1 { font-size:18px; }
+.status-bar { display:flex; align-items:center; gap:8px; font-size:13px; color:#666; }
+.dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
+.dot.green { background:#52c41a; }
+.dot.red { background:#f5222d; }
+.dot.yellow { background:#faad14; }
+
+.main-card { background:#fff; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,0.1); overflow:hidden; margin-bottom:16px; }
+
+/* 筛选栏 */
+.filters { padding:12px 24px; border-bottom:1px solid #f0f0f0; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+.filters label { font-size:12px; color:#999; }
+.filters select, .filters input { font-size:13px; padding:4px 8px; border:1px solid #d9d9d9; border-radius:4px; background:#fff; }
+.filters input { width:140px; }
+.filters .count { color:#999; font-size:12px; }
+
+/* 表格 */
+.table-wrap { overflow-x:auto; }
+table { width:100%; border-collapse:collapse; font-size:13px; }
+th { background:#fafafa; text-align:left; padding:10px 12px; font-weight:600; color:#666; border-bottom:2px solid #f0f0f0; white-space:nowrap; cursor:pointer; user-select:none; }
+th:hover { background:#f0f0f0; }
+th .sort-icon { font-size:10px; margin-left:4px; color:#bbb; }
+th.sort-asc .sort-icon, th.sort-desc .sort-icon { color:#1890ff; }
+td { padding:10px 12px; border-bottom:1px solid #f0f0f0; white-space:nowrap; }
+tr:hover td { background:#f9f9f9; }
+tr.paused td { background:#fff2f0; color:#999; }
+
+.tag { display:inline-block; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; }
+.tag.running { background:#f6ffed; color:#52c41a; border:1px solid #b7eb8f; }
+.tag.auto-paused { background:#fff2f0; color:#f5222d; border:1px solid #ffa39e; }
+.tag.paused { background:#f5f5f5; color:#999; border:1px solid #d9d9d9; }
+.tag.reviewing { background:#fff7e6; color:#fa8c16; border:1px solid #ffd591; }
+
+/* 关停日志 */
+.pause-log { background:#fff; border-radius:8px; padding:16px 24px; box-shadow:0 1px 3px rgba(0,0,0,0.1); }
+.pause-log h3 { font-size:15px; color:#f5222d; margin-bottom:10px; }
+.pause-item { padding:8px 12px; margin-bottom:6px; background:#fff2f0; border-left:3px solid #f5222d; border-radius:4px; font-size:13px; }
+.pause-item .time { color:#999; font-size:11px; }
+
+.empty { text-align:center; padding:60px; color:#999; font-size:15px; }
+
+@media(max-width:600px) { body { padding:10px; } }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>广告实时监控面板</h1>
+  <div class="status-bar">
+    <span class="dot yellow" id="dot"></span>
+    <span id="statusText">连接中...</span>
+    <span id="updateTime" style="margin-left:12px;"></span>
+  </div>
+</div>
+
+<div id="content">
+  <div class="empty" id="emptyState">等待数据推送中...</div>
+</div>
+
+<div class="pause-log" id="pauseLog" style="display:none;">
+  <h3>自动关停记录</h3>
+  <div id="pauseList"></div>
+</div>
+
+<script>
+const token = new URLSearchParams(location.search).get('token');
+if (!token) document.body.innerHTML = '<div class="empty">链接无效，请从机器人获取新链接</div>';
+
+let ws, retryDelay = 1000;
+const pauseHistory = [];
+let lastData = null;
+let sortState = { colKey: null, dir: 'desc' };
+let filterStatus = 'all';
+let filterCampaign = 'all';
+let filterName = '';
+
+const COLUMNS = [
+  { key:'campaign', label:'广告系列', fmt: v=>esc(v), get: a=>a._campaign||'', type:'str' },
+  { key:'adset_name', label:'广告组', fmt: v=>esc(v), get: a=>a.adset_name||'', type:'str' },
+  { key:'spend', label:'已花费金额', fmt: v=>'$'+n(v), get: a=>(a.metrics||{}).spend||0, type:'num' },
+  { key:'impressions', label:'展示次数', fmt: v=>ni(v), get: a=>(a.metrics||{}).impressions||0, type:'num' },
+  { key:'clicks', label:'点击次数', fmt: v=>ni(v), get: a=>(a.metrics||{}).clicks||0, type:'num' },
+  { key:'subs', label:'订阅次数', fmt: v=>ni(v), get: a=>(a.metrics||{}).subs||0, type:'num' },
+  { key:'sub_cost', label:'单次订阅费用', fmt: v=>'$'+n(v), get: a=>(a.metrics||{}).sub_cost||0, type:'num' },
+  { key:'trials', label:'开始试用次数', fmt: v=>ni(v), get: a=>(a.metrics||{}).trials||0, type:'num' },
+  { key:'trial_cost', label:'单次开始试用费用', fmt: v=>'$'+n(v), get: a=>(a.metrics||{}).trial_cost||0, type:'num' },
+  { key:'cpc', label:'单次点击费用（全部）', fmt: v=>'$'+n(v), get: a=>(a.metrics||{}).cpc||0, type:'num' },
+  { key:'cpm', label:'千次展示费用', fmt: v=>'$'+n(v), get: a=>(a.metrics||{}).cpm||0, type:'num' },
+  { key:'status', label:'状态', fmt: v=>{
+    const map = {
+      'ACTIVE':'投放中', 'running':'投放中',
+      'PAUSED':'已暂停', 'paused':'已暂停',
+      'auto_paused':'已关停',
+      'PENDING_REVIEW':'审核中', 'IN_PROCESS':'审核中',
+      'CAMPAIGN_PAUSED':'系列已暂停',
+      'ADSET_PAUSED':'广告组已暂停',
+      'DISAPPROVED':'未通过', 'PENDING_BILLING_INFO':'待付款',
+      'PREAPPROVED':'预批准', 'WITH_ISSUES':'有问题',
+      'ARCHIVED':'已归档', 'DELETED':'已删除',
+      'PENDING':'准备中',
+    };
+    const label = map[v] || v || '未知';
+    const cls = (v==='ACTIVE'||v==='running') ? 'running'
+      : v==='auto_paused' ? 'auto-paused'
+      : (v==='PENDING_REVIEW'||v==='IN_PROCESS'||v==='PREAPPROVED') ? 'reviewing'
+      : (v==='DISAPPROVED'||v==='WITH_ISSUES') ? 'auto-paused'
+      : 'paused';
+    return '<span class="tag '+cls+'">'+label+'</span>';
+  }, get: a=>a.status||'', type:'str' },
+];
+
+function connect() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(proto + '//' + location.host + '/ws');
+  ws.onopen = () => ws.send(JSON.stringify({ type: 'auth', token }));
+  ws.onmessage = e => {
+    const d = JSON.parse(e.data);
+    if (d.type === 'auth_ok') { setStatus('green', '已连接'); retryDelay = 1000; }
+    else if (d.type === 'auth_error') setStatus('red', '链接已失效');
+    else if (d.type === 'monitor_update') { lastData = d; render(d); }
+    else if (d.type === 'ping') ws.send(JSON.stringify({ type: 'pong' }));
+  };
+  ws.onclose = () => { setStatus('yellow', '重连中...'); setTimeout(() => { retryDelay = Math.min(retryDelay * 2, 30000); connect(); }, retryDelay); };
+  ws.onerror = () => ws.close();
+}
+
+function setStatus(c, t) {
+  document.getElementById('dot').className = 'dot ' + c;
+  document.getElementById('statusText').textContent = t;
+}
+
+function n(v, d) { return Number(v||0).toFixed(d===undefined?2:d); }
+function ni(v) { return Number(v||0).toLocaleString(); }
+
+function render(data) {
+  document.getElementById('emptyState')?.remove();
+  document.getElementById('updateTime').textContent = '更新于 ' + new Date(data.timestamp).toLocaleTimeString();
+
+  // 把所有系列的广告组打平到一个列表，加上系列名
+  let allAdsets = [];
+  const campaignNames = new Set();
+  (data.campaigns || []).forEach(c => {
+    campaignNames.add(c.campaign_name);
+    (c.adsets || []).forEach(a => {
+      allAdsets.push({ ...a, _campaign: c.campaign_name });
+    });
+  });
+
+  // 筛选
+  let filtered = allAdsets;
+  if (filterStatus !== 'all') filtered = filtered.filter(a => a.status === filterStatus);
+  if (filterCampaign !== 'all') filtered = filtered.filter(a => a._campaign === filterCampaign);
+  if (filterName) filtered = filtered.filter(a => (a.adset_name||'').toLowerCase().includes(filterName.toLowerCase()));
+
+  // 排序
+  if (sortState.colKey) {
+    const col = COLUMNS.find(c => c.key === sortState.colKey);
+    if (col) {
+      filtered.sort((a, b) => {
+        let va = col.get(a), vb = col.get(b);
+        if (col.type === 'num') return sortState.dir === 'asc' ? va - vb : vb - va;
+        return sortState.dir === 'asc' ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
+      });
+    }
+  }
+
+  // 表头
+  const ths = COLUMNS.map(col => {
+    let cls = '', icon = '↕';
+    if (sortState.colKey === col.key) {
+      cls = sortState.dir === 'asc' ? 'sort-asc' : 'sort-desc';
+      icon = sortState.dir === 'asc' ? '↑' : '↓';
+    }
+    return `<th class="${cls}" data-key="${col.key}">${col.label}<span class="sort-icon">${icon}</span></th>`;
+  }).join('');
+
+  // 行
+  const rows = filtered.length === 0
+    ? `<tr><td colspan="${COLUMNS.length}" style="text-align:center;color:#999;padding:20px;">暂无数据</td></tr>`
+    : filtered.map(a => {
+        const cls = a.status === 'auto_paused' ? 'paused' : '';
+        return `<tr class="${cls}">${COLUMNS.map(col => '<td>'+col.fmt(col.get(a))+'</td>').join('')}</tr>`;
+      }).join('');
+
+  // 系列下拉选项
+  const campOptions = ['<option value="all">全部系列</option>']
+    .concat([...campaignNames].map(n => `<option value="${esc(n)}" ${filterCampaign===n?'selected':''}>${esc(n)}</option>`))
+    .join('');
+
+  const box = document.getElementById('content');
+  box.innerHTML = `
+    <div class="main-card">
+      <div class="filters">
+        <label>系列</label>
+        <select id="fCampaign">${campOptions}</select>
+        <label>状态</label>
+        <select id="fStatus">
+          <option value="all" ${filterStatus==='all'?'selected':''}>全部</option>
+          <option value="ACTIVE" ${filterStatus==='ACTIVE'?'selected':''}>投放中</option>
+          <option value="PENDING_REVIEW" ${filterStatus==='PENDING_REVIEW'?'selected':''}>审核中</option>
+          <option value="PAUSED" ${filterStatus==='PAUSED'?'selected':''}>已暂停</option>
+          <option value="auto_paused" ${filterStatus==='auto_paused'?'selected':''}>已关停</option>
+          <option value="DISAPPROVED" ${filterStatus==='DISAPPROVED'?'selected':''}>未通过</option>
+        </select>
+        <label>搜索</label>
+        <input type="text" id="fName" placeholder="广告组名称..." value="${esc(filterName)}">
+        <span class="count">共 ${filtered.length} / ${allAdsets.length} 条</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>${ths}</tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+
+  bindEvents();
+
+  // 关停记录
+  (data.campaigns||[]).forEach(c => {
+    (c.pause_events||[]).forEach(ev => {
+      pauseHistory.unshift({ ...ev, campaign: c.campaign_name, time: data.timestamp });
+    });
+  });
+  const logEl = document.getElementById('pauseLog');
+  const listEl = document.getElementById('pauseList');
+  if (pauseHistory.length > 0) {
+    logEl.style.display = 'block';
+    listEl.innerHTML = pauseHistory.slice(0,30).map(ev =>
+      '<div class="pause-item">'
+      + '<strong>'+esc(ev.campaign)+'</strong> > '+esc(ev.adset_name)
+      + '<br>'+esc(ev.reason)+' (实际 '+n(ev.actual_rate)+'%)'
+      + '<div class="time">'+new Date(ev.time).toLocaleString()+'</div>'
+      + '</div>'
+    ).join('');
+  }
+}
+
+function bindEvents() {
+  document.querySelectorAll('th[data-key]').forEach(th => {
+    th.onclick = () => {
+      const key = th.dataset.key;
+      if (sortState.colKey === key) {
+        sortState.dir = sortState.dir === 'asc' ? 'desc' : 'asc';
+      } else {
+        sortState = { colKey: key, dir: 'desc' };
+      }
+      if (lastData) render(lastData);
+    };
+  });
+
+  document.getElementById('fStatus').onchange = function() {
+    filterStatus = this.value;
+    if (lastData) render(lastData);
+  };
+
+  document.getElementById('fCampaign').onchange = function() {
+    filterCampaign = this.value;
+    if (lastData) render(lastData);
+  };
+
+  document.getElementById('fName').oninput = function() {
+    filterName = this.value;
+    if (lastData) render(lastData);
+  };
+}
+
+function esc(s) { const d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
+
+if (token) connect();
+</script>
+</body>
+</html>

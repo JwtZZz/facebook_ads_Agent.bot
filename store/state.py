@@ -8,8 +8,15 @@ chat_histories: dict[int, list[dict]] = {}
 # 每个 chat_id 的 FB 账户配置
 fb_configs: dict[int, FBConfig] = {}
 
-# 自动监控开关
-monitor_chats: dict[int, bool] = {}
+# 自动监控: {chat_id: {"enabled": bool, "campaign_ids": [str], "fb_config": FBConfig}}
+monitor_chats: dict[int, dict] = {}
+
+# 系列 ID → 环境编号 映射
+campaign_env: dict[str, str] = {}
+
+# Dashboard token 映射
+dashboard_tokens: dict[str, int] = {}   # token -> chat_id
+chat_id_tokens: dict[int, str] = {}     # chat_id -> token
 
 
 def get_fb(chat_id: int) -> FBClient | None:

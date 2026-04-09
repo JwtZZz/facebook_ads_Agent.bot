@@ -38,22 +38,29 @@ class FBClient:
 
         if "error" in data:
             err = data["error"]
-            raise FBError(f"[{err.get('code')}] {err.get('message', str(err))}")
+            sub = err.get("error_subcode", "")
+            detail = err.get("error_user_msg", "") or err.get("error_user_title", "")
+            msg = f"[{err.get('code')}/{sub}] {err.get('message', str(err))}"
+            if detail:
+                msg += f"\n{detail}"
+            raise FBError(msg)
         return data
 
     # ── 广告系列 ────────────────────────────────────────────────
     def create_campaign(self, name: str,
                         daily_budget_usd: float = None,
-                        use_campaign_budget: bool = True) -> str:
+                        use_campaign_budget: bool = True,
+                        objective: str = "OUTCOME_SALES") -> str:
         body: dict = {
             "name": name,
-            "objective": "OUTCOME_SALES",
+            "objective": objective,
             "status": "PAUSED",
             "special_ad_categories": [],
-            "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
+            "is_adset_budget_sharing_enabled": False,
         }
         if daily_budget_usd and use_campaign_budget:
             body["daily_budget"] = int(daily_budget_usd * 100)
+            body["bid_strategy"] = "LOWEST_COST_WITHOUT_CAP"
         return self._req("POST", f"{self.cfg.account}/campaigns", body=body)["id"]
 
     def list_campaigns(self, status: str = "ACTIVE") -> list:
@@ -74,37 +81,73 @@ class FBClient:
     def create_adset(self, campaign_id: str, name: str,
                      daily_budget_usd: float,
                      optimization: str = "OFFSITE_CONVERSIONS",
-                     conversion_event: str = "PURCHASE",
-                     country: str = None) -> str:
+                     conversion_event: str = "SUBSCRIBE",
+                     country: str = None,
+                     mode: str = "转化",
+                     device_os: str = "Android",
+                     age_min: int = 18,
+                     age_max: int = 65,
+                     gender: int = 0) -> str:
+        """
+        gender: 0=全部, 1=男, 2=女
+        device_os: Android / iOS / All
+        """
         country = country or self.cfg.country
+
+        # 设备和平台
+        targeting: dict = {
+            "geo_locations": {"countries": [country]},
+            "publisher_platforms": ["facebook", "instagram"],
+            "age_min": age_min,
+            "age_max": age_max,
+            "targeting_automation": {"advantage_audience": 0},
+        }
+        if device_os == "All":
+            targeting["device_platforms"] = ["mobile", "desktop"]
+        else:
+            targeting["device_platforms"] = ["mobile"]
+            targeting["user_os"] = [device_os]
+
+        if gender in (1, 2):
+            targeting["genders"] = [gender]
+
         body: dict = {
             "name": name,
             "campaign_id": campaign_id,
-            "daily_budget": int(daily_budget_usd * 100),
             "optimization_goal": optimization,
             "billing_event": "IMPRESSIONS",
             "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
             "status": "PAUSED",
-            "targeting": json.dumps({
-                "geo_locations": {"countries": [country]},
-                "device_platforms": ["mobile"],
-                "publisher_platforms": ["facebook", "instagram"],
-                "user_os": ["Android"],
-            }),
-            "promoted_object": json.dumps({
+            "targeting": targeting,
+        }
+        # CBO 模式下广告组不设预算，由系列统一控制
+        if daily_budget_usd > 0:
+            body["daily_budget"] = int(daily_budget_usd * 100)
+        # 互动模式不需要 pixel，转化模式需要
+        if mode == "互动":
+            body["promoted_object"] = {"page_id": self.cfg.page_id}
+        else:
+            body["promoted_object"] = {
                 "pixel_id": self.cfg.pixel_id,
                 "custom_event_type": conversion_event,
-            }),
-        }
+            }
         return self._req("POST", f"{self.cfg.account}/adsets", body=body)["id"]
 
     def list_adsets(self, campaign_id: str = None, status: str = "ACTIVE") -> list:
         endpoint = f"{campaign_id}/adsets" if campaign_id else f"{self.cfg.account}/adsets"
-        return self._req("GET", endpoint, params={
-            "fields": "id,name,status,daily_budget,campaign_id",
-            "effective_status": json.dumps([status]),
+        params = {
+            "fields": "id,name,status,effective_status,daily_budget,campaign_id",
             "limit": 100,
-        }).get("data", [])
+        }
+        if status == "ALL":
+            params["effective_status"] = json.dumps([
+                "ACTIVE", "PAUSED", "PENDING_REVIEW", "DISAPPROVED",
+                "PREAPPROVED", "PENDING_BILLING_INFO", "CAMPAIGN_PAUSED",
+                "ADSET_PAUSED", "IN_PROCESS", "WITH_ISSUES", "ARCHIVED",
+            ])
+        else:
+            params["effective_status"] = json.dumps([status])
+        return self._req("GET", endpoint, params=params).get("data", [])
 
     def update_adset_budget(self, adset_id: str, daily_budget_usd: float):
         return self._req("POST", adset_id,
@@ -122,12 +165,25 @@ class FBClient:
                 files={"source": f},
             )["id"]
 
+    def upload_image(self, image_path: str) -> str:
+        """上传图片，返回 image_hash"""
+        with open(image_path, "rb") as f:
+            data = self._req(
+                "POST", f"{self.cfg.account}/adimages",
+                files={"filename": f},
+            )
+            # 返回格式: {"images": {"filename": {"hash": "xxx", ...}}}
+            images = data.get("images", {})
+            for v in images.values():
+                return v.get("hash", "")
+            raise FBError("图片上传返回数据异常")
+
     def create_video_creative(self, name: str, video_id: str,
                               landing_url: str, message: str = "",
-                              title: str = "", cta: str = "DOWNLOAD") -> str:
+                              title: str = "", cta: str = "SUBSCRIBE") -> str:
         body = {
             "name": name,
-            "object_story_spec": json.dumps({
+            "object_story_spec": {
                 "page_id": self.cfg.page_id,
                 "video_data": {
                     "video_id": video_id,
@@ -138,7 +194,28 @@ class FBClient:
                         "value": {"link": landing_url},
                     },
                 },
-            }),
+            },
+        }
+        return self._req("POST", f"{self.cfg.account}/adcreatives", body=body)["id"]
+
+    def create_image_creative(self, name: str, image_hash: str,
+                              landing_url: str, message: str = "",
+                              title: str = "", cta: str = "SUBSCRIBE") -> str:
+        body = {
+            "name": name,
+            "object_story_spec": {
+                "page_id": self.cfg.page_id,
+                "link_data": {
+                    "image_hash": image_hash,
+                    "link": landing_url,
+                    "message": message,
+                    "name": title,
+                    "call_to_action": {
+                        "type": cta,
+                        "value": {"link": landing_url},
+                    },
+                },
+            },
         }
         return self._req("POST", f"{self.cfg.account}/adcreatives", body=body)["id"]
 
@@ -147,7 +224,7 @@ class FBClient:
         return self._req("POST", f"{self.cfg.account}/ads", body={
             "name": name,
             "adset_id": adset_id,
-            "creative": json.dumps({"creative_id": creative_id}),
+            "creative": {"creative_id": creative_id},
             "status": "PAUSED",
         })["id"]
 
@@ -160,7 +237,8 @@ class FBClient:
                      date_preset: str = "today") -> list:
         fields = [
             "campaign_name", "adset_name", "ad_name",
-            "spend", "impressions", "clicks", "cpc", "ctr",
+            "spend", "impressions", "reach", "frequency",
+            "clicks", "cpc", "ctr",
             "unique_outbound_clicks",
             "actions", "action_values", "cost_per_action_type",
         ]

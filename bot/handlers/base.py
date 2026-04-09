@@ -14,7 +14,7 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "/setfb — 配置 FB 账户\n"
         "/campaigns — 列出广告系列\n"
         "/report — 今日数据报表\n"
-        "/onedollar — 一刀流投放\n"
+        "/normal — 创建广告投放\n"
         "/pause — 暂停广告组\n"
         "/resume — 启动广告组\n"
         "/addbudget — 增加预算\n"
