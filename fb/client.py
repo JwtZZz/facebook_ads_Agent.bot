@@ -136,7 +136,7 @@ class FBClient:
     def list_adsets(self, campaign_id: str = None, status: str = "ACTIVE") -> list:
         endpoint = f"{campaign_id}/adsets" if campaign_id else f"{self.cfg.account}/adsets"
         params = {
-            "fields": "id,name,status,effective_status,daily_budget,campaign_id",
+            "fields": "id,name,status,effective_status,daily_budget,campaign_id,promoted_object",
             "limit": 100,
         }
         if status == "ALL":
@@ -236,7 +236,9 @@ class FBClient:
                      level: str = "adset",
                      date_preset: str = "today") -> list:
         fields = [
-            "campaign_name", "adset_name", "ad_name",
+            "campaign_id", "campaign_name",
+            "adset_id", "adset_name",
+            "ad_name",
             "spend", "impressions", "reach", "frequency",
             "clicks", "cpc", "ctr",
             "unique_outbound_clicks",

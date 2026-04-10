@@ -390,9 +390,7 @@ async def automonitor_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     if arg == "off":
         monitor_chats[chat_id] = {"enabled": False}
-        from services.web import revoke_token
-        revoke_token(chat_id)
-        await update.message.reply_text("❌ 自动监控已关闭，面板链接已失效。")
+        await update.message.reply_text("❌ 自动监控已关闭。")
         return
 
     if arg == "status":
@@ -402,18 +400,18 @@ async def automonitor_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         status = "✅ 开启中" if enabled else "❌ 已关闭"
         camp_info = f"监控 {len(cids)} 个系列" if cids else "未选择系列"
 
-        from store.state import chat_id_tokens
-        token = chat_id_tokens.get(chat_id)
         host = os.getenv("DASHBOARD_HOST", "localhost:8080")
-        url_line = f"\n📊 实时面板：http://{host}/dashboard?token={token}" if token else ""
+        secret = os.getenv("DASHBOARD_SECRET", "admin")
+        url_line = f"\n📊 实时面板：http://{host}/dashboard?key={secret}"
 
         await update.message.reply_text(
             f"🤖 自动监控状态：{status}\n"
             f"📋 {camp_info}\n"
-            f"⏱ 数据刷新：每 10 分钟{url_line}\n\n"
-            f"关停规则：\n"
-            f"• 展示≥1000 CTR<0.5% → 暂停（素材不行）\n"
-            f"• 点击≥50 订阅率<5% → 暂停（落地页/定向问题）"
+            f"⏱ 数据刷新：每 2 分钟{url_line}\n\n"
+            f"关停规则（按转化事件自动匹配）：\n"
+            f"📋 订阅类：$3无点击→关 | $5无订阅→关\n"
+            f"🛒 购物类：$3无点击→关 | $5无注册→关 | $9无购买→关\n"
+            f"📝 注册类：$3无点击→关 | $5无注册→关"
         )
         return
 
@@ -513,11 +511,10 @@ async def monitor_confirm_callback(update: Update, ctx: ContextTypes.DEFAULT_TYP
     ctx.chat_data.pop("monitor_selected", None)
     ctx.chat_data.pop("monitor_camps", None)
 
-    # 生成 Dashboard token 和链接
-    from services.web import generate_token
-    token = generate_token(chat_id)
+    # 固定 Dashboard 链接
     host = os.getenv("DASHBOARD_HOST", "localhost:8080")
-    url = f"http://{host}/dashboard?token={token}"
+    secret = os.getenv("DASHBOARD_SECRET", "admin")
+    url = f"http://{host}/dashboard?key={secret}"
 
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("📊 打开实时面板", url=url)]
@@ -526,9 +523,10 @@ async def monitor_confirm_callback(update: Update, ctx: ContextTypes.DEFAULT_TYP
         f"✅ 自动监控已开启\n\n"
         f"📋 监控 {len(selected)} 个系列：\n"
         + "\n".join(selected_names) + "\n\n"
-        f"关停规则：\n"
-        f"• 展示≥1000 CTR<0.5% → 暂停（素材不行）\n"
-        f"• 点击≥50 订阅率<5% → 暂停（落地页/定向问题）\n\n"
+        f"关停规则（按转化事件自动匹配）：\n"
+        f"📋 订阅类：$3无点击→关 | $5无订阅→关\n"
+        f"🛒 购物类：$3无点击→关 | $5无注册→关 | $9无购买→关\n"
+        f"📝 注册类：$3无点击→关 | $5无注册→关\n\n"
         f"发 /automonitor off 关闭",
         reply_markup=keyboard,
     )
@@ -541,9 +539,9 @@ async def monitor_confirm_callback(update: Update, ctx: ContextTypes.DEFAULT_TYP
 # ══════════════════════════════════════════════════════════════════
 # 按钮引导式创建广告
 # ══════════════════════════════════════════════════════════════════
-(OD_TOKEN, OD_ACCOUNT, OD_NAME, OD_COUNT, OD_BUDGET, OD_URL,
+(OD_TOKEN, OD_ACCOUNT, OD_PIXEL, OD_PAGE, OD_EVENT, OD_NAME, OD_COUNT, OD_BUDGET, OD_URL,
  OD_COUNTRY, OD_DEVICE, OD_GENDER, OD_AGE, OD_CONFIRM,
- OD_MEDIA, OD_TEXT, OD_TITLE, OD_PUBLISH) = range(15)
+ OD_MEDIA, OD_TEXT, OD_TITLE, OD_PUBLISH) = range(18)
 
 
 def _fetch_ad_accounts(token: str) -> list[dict]:
@@ -644,22 +642,19 @@ async def _finish_account_selection(update: Update, ctx, edit_msg=None):
     acc_name = acc.get("name", "")
     chat_id = update.effective_chat.id
 
-    # 查像素
-    pixel_id = ""
+    # 查所有像素
+    pixels = []
     try:
         resp = _requests.get(f"{GRAPH}/act_{acc_id}/adspixels", params={
-            "access_token": token, "fields": "id,name", "limit": 5,
+            "access_token": token, "fields": "id,name", "limit": 20,
         })
         pixels = resp.json().get("data", [])
-        if pixels:
-            pixel_id = pixels[0].get("id", "")
     except Exception as e:
         logger.warning(f"查询像素失败: {e}")
 
-    # 查主页 — 通过广告账户的 business 字段拿 BM ID，再查 owned_pages
-    page_id = ""
+    # 查所有主页
+    pages = []
     try:
-        # 方式1: 广告账户 → business_id → owned_pages
         resp = _requests.get(f"{GRAPH}/act_{acc_id}", params={
             "access_token": token, "fields": "business",
         })
@@ -667,24 +662,107 @@ async def _finish_account_selection(update: Update, ctx, edit_msg=None):
         biz_id = biz.get("id", "")
         if biz_id:
             resp = _requests.get(f"{GRAPH}/{biz_id}/owned_pages", params={
-                "access_token": token, "fields": "id,name", "limit": 10,
+                "access_token": token, "fields": "id,name", "limit": 20,
             })
             pages = resp.json().get("data", [])
-            if pages:
-                page_id = pages[0].get("id", "")
-
-        # 方式2: promote_pages（兜底）
-        if not page_id:
+        if not pages:
             resp = _requests.get(f"{GRAPH}/act_{acc_id}/promote_pages", params={
-                "access_token": token, "fields": "id,name", "limit": 5,
+                "access_token": token, "fields": "id,name", "limit": 20,
             })
             pages = resp.json().get("data", [])
-            if pages:
-                page_id = pages[0].get("id", "")
     except Exception as e:
         logger.warning(f"查询主页失败: {e}")
 
-    # 更新 FBConfig
+    ctx.chat_data.pop("od_accounts", None)
+    ctx.chat_data.pop("od_selected_account", None)
+    ctx.chat_data["od_pixels"] = pixels
+    ctx.chat_data["od_pages"] = pages
+    ctx.chat_data["od_acc_id"] = acc_id
+    ctx.chat_data["od_acc_name"] = acc_name
+
+    # 像素选择
+    if len(pixels) == 0:
+        # 没有像素，跳过
+        ctx.chat_data["od_pixel_id"] = ""
+        return await _show_page_selection(update, ctx, edit_msg)
+    elif len(pixels) == 1:
+        # 只有一个，自动选中
+        ctx.chat_data["od_pixel_id"] = pixels[0].get("id", "")
+        return await _show_page_selection(update, ctx, edit_msg)
+    else:
+        # 多个，让投手选
+        keyboard = []
+        for i, p in enumerate(pixels):
+            keyboard.append([InlineKeyboardButton(
+                f"📊 {p.get('name', '')} ({p.get('id', '')})",
+                callback_data=f"od_pixel:{i}"
+            )])
+        text = f"✅ 已选择：{acc_name} (act_{acc_id})\n\n📊 请选择像素："
+        if edit_msg:
+            await edit_msg.edit_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+        else:
+            await update.effective_chat.send_message(text, reply_markup=InlineKeyboardMarkup(keyboard))
+        return OD_PIXEL
+
+
+async def od_pixel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """按钮回调：选择像素"""
+    query = update.callback_query
+    await query.answer()
+    idx = int(query.data.split(":")[1])
+    pixels = ctx.chat_data.get("od_pixels", [])
+    if idx < len(pixels):
+        ctx.chat_data["od_pixel_id"] = pixels[idx].get("id", "")
+    return await _show_page_selection(update, ctx, edit_msg=query.message)
+
+
+async def _show_page_selection(update, ctx, edit_msg=None):
+    """显示主页选择"""
+    pages = ctx.chat_data.get("od_pages", [])
+    acc_name = ctx.chat_data.get("od_acc_name", "")
+    pixel_id = ctx.chat_data.get("od_pixel_id", "")
+
+    if len(pages) == 0:
+        ctx.chat_data["od_page_id"] = ""
+        return await _finish_pixel_page(update, ctx, edit_msg)
+    elif len(pages) == 1:
+        ctx.chat_data["od_page_id"] = pages[0].get("id", "")
+        return await _finish_pixel_page(update, ctx, edit_msg)
+    else:
+        keyboard = []
+        for i, p in enumerate(pages):
+            keyboard.append([InlineKeyboardButton(
+                f"📄 {p.get('name', '')} ({p.get('id', '')})",
+                callback_data=f"od_page:{i}"
+            )])
+        text = f"✅ 像素：{pixel_id or '无'}\n\n📄 请选择主页："
+        if edit_msg:
+            await edit_msg.edit_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+        else:
+            await update.effective_chat.send_message(text, reply_markup=InlineKeyboardMarkup(keyboard))
+        return OD_PAGE
+
+
+async def od_page(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """按钮回调：选择主页"""
+    query = update.callback_query
+    await query.answer()
+    idx = int(query.data.split(":")[1])
+    pages = ctx.chat_data.get("od_pages", [])
+    if idx < len(pages):
+        ctx.chat_data["od_page_id"] = pages[idx].get("id", "")
+    return await _finish_pixel_page(update, ctx, edit_msg=query.message)
+
+
+async def _finish_pixel_page(update, ctx, edit_msg=None):
+    """像素和主页都选完，保存 FBConfig，进入转化事件选择"""
+    token = ctx.chat_data.get("od_token", "")
+    acc_id = ctx.chat_data.get("od_acc_id", "")
+    acc_name = ctx.chat_data.get("od_acc_name", "")
+    pixel_id = ctx.chat_data.get("od_pixel_id", "")
+    page_id = ctx.chat_data.get("od_page_id", "")
+    chat_id = update.effective_chat.id
+
     fb_configs[chat_id] = FBConfig(
         access_token=token,
         ad_account_id=acc_id,
@@ -692,28 +770,24 @@ async def _finish_account_selection(update: Update, ctx, edit_msg=None):
         page_id=page_id,
     )
 
-    # 清理临时数据
-    ctx.chat_data.pop("od_accounts", None)
-    ctx.chat_data.pop("od_selected_account", None)
-
-    mode = ctx.chat_data.get("od_mode", "normal")
-    mode_label = "创建广告"
+    keyboard = [
+        [InlineKeyboardButton("📋 订阅", callback_data="od_event:SUBSCRIBE"),
+         InlineKeyboardButton("📝 注册", callback_data="od_event:COMPLETE_REGISTRATION"),
+         InlineKeyboardButton("🛒 购物", callback_data="od_event:PURCHASE")],
+    ]
 
     text = (
         f"✅ 已选择：{acc_name} (act_{acc_id})\n"
         f"像素: {pixel_id or '未找到'} | 主页: {page_id or '未找到'}\n\n"
-        f"📋 {mode_label} — 请输入系列名称\n"
-        f"命名格式：产品-渠道号-优化师-日期-系列几\n"
-        f"例如：bet7-778-DT-0403-1\n\n"
-        f"发 /cancel 取消"
+        f"🎯 请选择转化事件："
     )
 
     if edit_msg:
-        await edit_msg.edit_text(text)
+        await edit_msg.edit_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
     else:
-        await update.effective_chat.send_message(text)
+        await update.effective_chat.send_message(text, reply_markup=InlineKeyboardMarkup(keyboard))
 
-    return OD_NAME
+    return OD_EVENT
 
 
 async def od_account(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -735,6 +809,33 @@ async def od_account(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     await query.edit_message_text(f"⏳ 正在获取 {acc_name} (act_{acc_id}) 的配置...")
     return await _finish_account_selection(update, ctx, edit_msg=query.message)
+
+
+EVENT_CONFIG = {
+    "SUBSCRIBE": {"label": "订阅", "cta": "SUBSCRIBE"},
+    "COMPLETE_REGISTRATION": {"label": "注册", "cta": "SIGN_UP"},
+    "PURCHASE": {"label": "购物", "cta": "SHOP_NOW"},
+}
+
+
+async def od_event(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """按钮回调：选择转化事件，进入系列名"""
+    query = update.callback_query
+    await query.answer()
+    event = query.data.split(":")[1]
+    cfg = EVENT_CONFIG.get(event, EVENT_CONFIG["SUBSCRIBE"])
+
+    ctx.chat_data["od_conversion_event"] = event
+    ctx.chat_data["od_cta"] = cfg["cta"]
+
+    await query.edit_message_text(
+        f"✅ 转化事件：{cfg['label']}\n\n"
+        f"📋 请输入系列名称\n"
+        f"命名格式：产品-渠道号-优化师-日期-系列几\n"
+        f"例如：bet7-778-DT-0403-1\n\n"
+        f"发 /cancel 取消"
+    )
+    return OD_NAME
 
 
 async def od_name(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -889,12 +990,14 @@ async def od_age(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     gender_label = {0: "全部", 1: "男", 2: "女"}[d["od_gender"]]
 
     mode_line = f"💰 系列预算：${d['od_budget']}/天（CBO 自动分配）"
+    event_label = EVENT_CONFIG.get(d.get("od_conversion_event", "SUBSCRIBE"), {}).get("label", "订阅")
 
     summary = (
         f"📋 请确认广告配置：\n"
         f"{'─' * 24}\n"
         f"{mode_line}\n"
         f"📝 系列名：{d['od_camp_name']}\n"
+        f"🎯 转化事件：{event_label}\n"
         f"📦 广告组：{d['od_count']} 组\n"
         f"🔗 落地页：{d['od_url']}\n"
         f"🌍 国家：{d['od_country']}\n"
@@ -939,7 +1042,9 @@ async def od_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             age_min=d["od_age_min"],
             age_max=d["od_age_max"],
             gender=d["od_gender"],
+            conversion_event=d.get("od_conversion_event", "SUBSCRIBE"),
         )
+        ctx.chat_data["od_cta"] = d.get("od_cta", "SUBSCRIBE")
 
         ctx.chat_data["last_campaign_id"] = camp_id
         ctx.chat_data["last_adset_ids"]   = adset_ids
@@ -1117,6 +1222,7 @@ async def od_publish(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             camp_id=camp_id,
             video_id=video_id,
             image_hash=image_hash,
+            cta=d.get("od_cta", "SUBSCRIBE"),
         )
         await query.edit_message_text(
             f"🚀 发布成功！\n\n"

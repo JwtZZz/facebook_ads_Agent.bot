@@ -15,10 +15,11 @@ from bot.handlers.fb_ads import (
     normal_cmd, publish_last_cmd, automonitor_cmd,
     monitor_toggle_callback, monitor_confirm_callback,
     # 按钮引导式创建
-    OD_TOKEN, OD_ACCOUNT, OD_NAME, OD_COUNT, OD_BUDGET, OD_URL,
+    OD_TOKEN, OD_ACCOUNT, OD_PIXEL, OD_PAGE, OD_EVENT, OD_NAME, OD_COUNT, OD_BUDGET, OD_URL,
     OD_COUNTRY, OD_DEVICE, OD_GENDER, OD_AGE, OD_CONFIRM,
     OD_MEDIA, OD_TEXT, OD_TITLE, OD_PUBLISH,
-    od_start, od_token_input, od_account, od_name, od_count, od_budget, od_url,
+    od_start, od_token_input, od_account, od_pixel, od_page, od_event,
+    od_name, od_count, od_budget, od_url,
     od_country, od_device, od_gender, od_age, od_confirm,
     od_media, od_text, od_title, od_publish, od_cancel,
 )
@@ -106,6 +107,9 @@ def build_app():
         states={
             OD_TOKEN:   [MessageHandler(filters.TEXT & ~filters.COMMAND, od_token_input)],
             OD_ACCOUNT: [CallbackQueryHandler(od_account, pattern=r"^od_acct:")],
+            OD_PIXEL:   [CallbackQueryHandler(od_pixel, pattern=r"^od_pixel:")],
+            OD_PAGE:    [CallbackQueryHandler(od_page, pattern=r"^od_page:")],
+            OD_EVENT:   [CallbackQueryHandler(od_event, pattern=r"^od_event:")],
             OD_NAME:    [MessageHandler(filters.TEXT & ~filters.COMMAND, od_name)],
             OD_COUNT:   [MessageHandler(filters.TEXT & ~filters.COMMAND, od_count)],
             OD_BUDGET:  [MessageHandler(filters.TEXT & ~filters.COMMAND, od_budget)],

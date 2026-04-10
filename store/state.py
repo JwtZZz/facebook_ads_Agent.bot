@@ -18,6 +18,9 @@ campaign_env: dict[str, str] = {}
 dashboard_tokens: dict[str, int] = {}   # token -> chat_id
 chat_id_tokens: dict[int, str] = {}     # chat_id -> token
 
+# 自定义关停规则: {campaign_id: {event_type: [(threshold, metric, min_val, label), ...]}}
+custom_rules: dict[str, list] = {}
+
 
 def get_fb(chat_id: int) -> FBClient | None:
     """获取该 chat 的 FBClient，优先用动态配置，其次用环境变量默认值"""

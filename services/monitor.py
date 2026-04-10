@@ -4,17 +4,29 @@ import logging
 from datetime import datetime
 from fb import FBClient
 from fb.insights import parse_action, parse_action_value
-from store.state import monitor_chats
+from store.state import monitor_chats, custom_rules
 
 logger = logging.getLogger(__name__)
 
-# 转化率关停规则：(样本指标, 样本门槛, 转化指标, 转化率阈值%, 说明)
-RULES = [
-    ("impressions", 1000, "clicks",  0.5, "展示≥1000 CTR<0.5%，素材不行"),
-    ("clicks",       50,  "subs",    5.0, "点击≥50 订阅率<5%，落地页或定向有问题"),
-]
+# 自动关停规则：按转化事件分类
+# 格式：(消耗阈值USD, 检查指标, 最低要求数量, 说明)
+RULES_BY_EVENT = {
+    "SUBSCRIBE": [
+        (3.0, "clicks",    0, "消耗$3无点击"),
+        (5.0, "subs",      0, "消耗$5无订阅"),
+    ],
+    "PURCHASE": [
+        (3.0, "clicks",    0, "消耗$3无点击"),
+        (5.0, "regs",      0, "消耗$5无注册"),
+        (9.0, "purchases", 0, "消耗$9无购买"),
+    ],
+    "COMPLETE_REGISTRATION": [
+        (3.0, "clicks",    0, "消耗$3无点击"),
+        (5.0, "regs",      0, "消耗$5无注册"),
+    ],
+}
 
-INTERVAL_SECONDS = 600  # 10 分钟
+INTERVAL_SECONDS = 120  # 2 分钟
 
 
 def _extract_metrics(row: dict) -> dict:
@@ -69,15 +81,18 @@ def _collect_campaign_data(campaign_id: str, rows: list, fb: FBClient, camp_stat
         try:
             raw_adsets = fb.list_adsets(campaign_id=campaign_id, status="ALL")
             for a in raw_adsets:
-                zero_metrics = {k: 0 for k in ["spend","impressions","clicks","ctr","cpm","cpc","subs","sub_cost","sub_rate","trials","trial_cost"]}
+                zero_metrics = {k: 0 for k in ["spend","impressions","clicks","ctr","cpm","cpc","subs","sub_cost","sub_rate","trials","trial_cost","reach","frequency","regs","reg_cost","purchases","cpa","revenue","conv_rate","roas"]}
                 fb_status = a.get("effective_status", a.get("status", "UNKNOWN"))
-                # 如果系列本身不是 ACTIVE，用系列状态覆盖（准备中/审核中等）
                 if camp_status != "ACTIVE":
                     fb_status = camp_status
+                # 从 promoted_object 获取转化事件类型
+                po = a.get("promoted_object", {})
+                conv_event = po.get("custom_event_type", "UNKNOWN")
                 adsets.append({
                     "adset_id": a.get("id", ""),
                     "adset_name": a.get("name", "?"),
                     "status": fb_status,
+                    "conversion_event": conv_event,
                     "metrics": zero_metrics,
                 })
         except Exception:
@@ -89,6 +104,16 @@ def _collect_campaign_data(campaign_id: str, rows: list, fb: FBClient, camp_stat
             "adsets": adsets,
             "pause_events": [],
         }
+
+    # 获取广告组的转化事件类型
+    adset_events = {}
+    try:
+        all_adsets_info = fb.list_adsets(campaign_id=campaign_id, status="ALL")
+        for ai in all_adsets_info:
+            po = ai.get("promoted_object", {})
+            adset_events[ai.get("id", "")] = po.get("custom_event_type", "UNKNOWN")
+    except Exception:
+        pass
 
     for row in rows:
         adset_id = row.get("adset_id")
@@ -106,34 +131,41 @@ def _collect_campaign_data(campaign_id: str, rows: list, fb: FBClient, camp_stat
 
         status = "running"
 
+        # 根据转化事件类型选择对应的关停规则（优先用自定义规则）
+        conv_event = adset_events.get(adset_id, "UNKNOWN")
+        campaign_custom = custom_rules.get(campaign_id)
+        if campaign_custom:
+            rules = [(r["threshold"], r["metric"], r["min_val"], r["label"]) for r in campaign_custom]
+        else:
+            rules = RULES_BY_EVENT.get(conv_event, RULES_BY_EVENT.get("SUBSCRIBE", []))
+
         # 检查关停规则
         if m["spend"] > 0:
-            for sample_key, sample_min, conv_key, rate_min, label in RULES:
-                sample_val = m[sample_key]
-                conv_val = m[conv_key]
-                if sample_val >= sample_min:
-                    rate = (conv_val / sample_val * 100) if sample_val > 0 else 0
-                    if rate < rate_min:
-                        try:
-                            fb.set_adset_status(adset_id, "PAUSED")
-                            status = "auto_paused"
-                            pause_events.append({
-                                "adset_id": adset_id,
-                                "adset_name": adset_name,
-                                "reason": label,
-                                "actual_rate": round(rate, 2),
-                            })
-                        except Exception as e:
-                            logger.error(f"关停失败 {adset_id}: {e}")
-                        break
+            for threshold, metric, min_val, label in rules:
+                if m["spend"] >= threshold and m[metric] <= min_val:
+                    try:
+                        fb.set_adset_status(adset_id, "PAUSED")
+                        status = "auto_paused"
+                        pause_events.append({
+                            "adset_id": adset_id,
+                            "adset_name": adset_name,
+                            "reason": label,
+                            "actual_rate": m[metric],
+                        })
+                    except Exception as e:
+                        logger.error(f"关停失败 {adset_id}: {e}")
+                    break
 
         adsets.append({
             "adset_id": adset_id,
             "adset_name": adset_name,
             "status": status,
+            "conversion_event": adset_events.get(adset_id, "UNKNOWN"),
             "metrics": {
                 "spend": round(m["spend"], 2),
                 "impressions": m["impressions"],
+                "reach": m["reach"],
+                "frequency": round(m["frequency"], 1),
                 "clicks": m["clicks"],
                 "ctr": round(m["ctr"], 2),
                 "cpm": round(m["cpm"], 2),
@@ -143,6 +175,13 @@ def _collect_campaign_data(campaign_id: str, rows: list, fb: FBClient, camp_stat
                 "sub_rate": round(m["sub_rate"], 1),
                 "trials": m["trials"],
                 "trial_cost": round(m["trial_cost"], 2),
+                "regs": m["regs"],
+                "reg_cost": round(m["reg_cost"], 2),
+                "purchases": m["purchases"],
+                "cpa": round(m["cpa"], 2),
+                "revenue": round(m["revenue"], 2),
+                "conv_rate": round(m["conv_rate"], 1),
+                "roas": round(m["roas"], 1),
             },
         })
 
@@ -167,58 +206,93 @@ def _collect_campaign_data(campaign_id: str, rows: list, fb: FBClient, camp_stat
     }
 
 
-async def run_once(app, chat_id: int):
-    """对单个 chat 跑一次监控：收集数据并推送到 Dashboard"""
-    info = monitor_chats.get(chat_id, {})
-    if not info.get("enabled"):
-        return
+ACCOUNT_STATUS_MAP = {
+    1: "正常", 2: "已封禁", 3: "未结算", 7: "风控审核中",
+    8: "待结算", 9: "宽限期", 100: "待关闭", 101: "已关闭",
+}
 
-    fb_config = info.get("fb_config")
-    campaign_ids = info.get("campaign_ids", [])
-    if not fb_config or not campaign_ids:
-        return
 
-    fb = FBClient(fb_config)
+async def collect_all_campaigns() -> dict | None:
+    """收集所有监控中的系列数据，返回 payload"""
+    all_campaigns = []
+    all_accounts = []
+    seen_accounts = set()
     now = datetime.now().isoformat()
 
-    try:
-        # 先批量获取系列名称和状态
-        campaign_names = {}
-        campaign_statuses = {}
-        for cid in campaign_ids:
+    for chat_id, info in list(monitor_chats.items()):
+        if not isinstance(info, dict) or not info.get("enabled"):
+            continue
+
+        fb_config = info.get("fb_config")
+        campaign_ids = info.get("campaign_ids", [])
+        if not fb_config or not campaign_ids:
+            continue
+
+        fb = FBClient(fb_config)
+
+        # 查账户状态（每个账户只查一次）
+        acct_id = fb.cfg.account
+        if acct_id not in seen_accounts:
+            seen_accounts.add(acct_id)
             try:
-                info_data = fb._req("GET", cid, params={"fields": "name,effective_status"})
-                campaign_names[cid] = info_data.get("name", cid)
-                campaign_statuses[cid] = info_data.get("effective_status", "ACTIVE")
+                acct_info = fb._req("GET", acct_id, params={
+                    "fields": "name,account_status,disable_reason",
+                })
+                all_accounts.append({
+                    "account_id": acct_id,
+                    "name": acct_info.get("name", acct_id),
+                    "status": acct_info.get("account_status", 1),
+                    "status_text": ACCOUNT_STATUS_MAP.get(acct_info.get("account_status", 1), "未知"),
+                    "disable_reason": acct_info.get("disable_reason", 0),
+                })
             except Exception:
-                campaign_names[cid] = cid
-                campaign_statuses[cid] = "ACTIVE"
+                all_accounts.append({
+                    "account_id": acct_id,
+                    "name": acct_id,
+                    "status": -1,
+                    "status_text": "查询失败",
+                    "disable_reason": 0,
+                })
 
-        campaigns = []
-        for cid in campaign_ids:
-            rows = fb.get_insights(cid, level="adset", date_preset="today")
-            camp_status = campaign_statuses.get(cid, "ACTIVE")
-            data = _collect_campaign_data(cid, rows, fb, camp_status)
-            data["campaign_name"] = campaign_names.get(cid, data["campaign_name"])
-            campaigns.append(data)
+        try:
+            for cid in campaign_ids:
+                try:
+                    info_data = fb._req("GET", cid, params={"fields": "name,effective_status"})
+                    camp_name = info_data.get("name", cid)
+                    camp_status = info_data.get("effective_status", "ACTIVE")
+                except Exception:
+                    camp_name = cid
+                    camp_status = "ACTIVE"
 
-        payload = {
-            "type": "monitor_update",
-            "timestamp": now,
-            "campaigns": campaigns,
-        }
+                rows = fb.get_insights(cid, level="adset", date_preset="today")
+                data = _collect_campaign_data(cid, rows, fb, camp_status)
+                data["campaign_name"] = camp_name
+                all_campaigns.append(data)
+        except Exception as e:
+            logger.error(f"收集数据出错 [chat={chat_id}]: {e}")
 
+    if not all_campaigns and not all_accounts:
+        return None
+
+    return {
+        "type": "monitor_update",
+        "timestamp": now,
+        "accounts": all_accounts,
+        "campaigns": all_campaigns,
+    }
+
+
+async def run_once(app, chat_id: int):
+    """对单个 chat 跑一次监控（兼容旧调用）"""
+    payload = await collect_all_campaigns()
+    if payload:
         from services.web import push_to_dashboard
         await push_to_dashboard(chat_id, payload)
 
-    except Exception as e:
-        logger.error(f"监控出错 [chat={chat_id}]: {e}")
-
 
 async def monitor_loop(app, interval_seconds: int = INTERVAL_SECONDS):
-    """后台循环，每 interval_seconds 秒检查一次所有开启监控的 chat"""
+    """后台循环，每 interval_seconds 秒拉数据推送到面板"""
     while True:
         await asyncio.sleep(interval_seconds)
-        for chat_id, info in list(monitor_chats.items()):
-            if isinstance(info, dict) and info.get("enabled"):
-                await run_once(app, chat_id)
+        from services.web import push_all_data
+        await push_all_data()

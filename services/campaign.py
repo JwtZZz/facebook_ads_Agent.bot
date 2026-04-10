@@ -11,7 +11,8 @@ def normal_flow(fb: FBClient, camp_name: str, count: int,
                 device_os: str = "Android",
                 age_min: int = 18,
                 age_max: int = 65,
-                gender: int = 0) -> tuple[str, list[str]]:
+                gender: int = 0,
+                conversion_event: str = "SUBSCRIBE") -> tuple[str, list[str]]:
     """
     正常跑法：创建 1 个系列（CBO 广告系列预算）+ N 个广告组
     daily_budget_usd: 广告系列级别的单日预算
@@ -33,6 +34,7 @@ def normal_flow(fb: FBClient, camp_name: str, count: int,
             name=f"{camp_name}-{i:02d}",
             daily_budget_usd=0,  # CBO 模式下广告组不设预算
             optimization="OFFSITE_CONVERSIONS",
+            conversion_event=conversion_event,
             mode="转化",
             country=country or None,
             device_os=device_os,
@@ -53,7 +55,8 @@ def bind_and_publish(fb: FBClient,
                      title: str,
                      camp_id: str = None,
                      video_id: str = "",
-                     image_hash: str = "") -> str:
+                     image_hash: str = "",
+                     cta: str = "SUBSCRIBE") -> str:
     """
     为所有广告组创建广告创意 + 广告，然后全部启动
     支持视频或图片素材
@@ -67,7 +70,7 @@ def bind_and_publish(fb: FBClient,
             landing_url=landing_url,
             message=message,
             title=title,
-            cta="SUBSCRIBE",
+            cta=cta,
         )
     else:
         creative_id = fb.create_video_creative(
@@ -76,7 +79,7 @@ def bind_and_publish(fb: FBClient,
             landing_url=landing_url,
             message=message,
             title=title,
-            cta="SUBSCRIBE",
+            cta=cta,
         )
 
     ad_ids = []
