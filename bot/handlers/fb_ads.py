@@ -541,7 +541,8 @@ async def monitor_confirm_callback(update: Update, ctx: ContextTypes.DEFAULT_TYP
 # ══════════════════════════════════════════════════════════════════
 (OD_TOKEN, OD_ACCOUNT, OD_PIXEL, OD_PAGE, OD_EVENT, OD_NAME, OD_COUNT, OD_BUDGET, OD_URL,
  OD_COUNTRY, OD_DEVICE, OD_GENDER, OD_AGE, OD_CONFIRM,
- OD_MEDIA, OD_TEXT, OD_TITLE, OD_PUBLISH) = range(18)
+ OD_MEDIA, OD_TEXT, OD_TITLE, OD_PUBLISH,
+ OD_MODE, OD_AI_CHOICE, OD_MANUAL_COPY) = range(21)
 
 
 def _fetch_ad_accounts(token: str) -> list[dict]:
@@ -839,34 +840,67 @@ async def od_event(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 async def od_name(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """收到系列名，问组数"""
+    """收到系列名，问投放模式"""
     name = update.message.text.strip()
     if not name or name.startswith("/"):
         await update.message.reply_text("❌ 名称不能为空或以 / 开头，请重新输入：")
         return OD_NAME
 
     ctx.chat_data["od_camp_name"] = name
+
+    keyboard = [
+        [InlineKeyboardButton("📦 多广告组（每组1条广告）", callback_data="od_flow:multi_adset")],
+        [InlineKeyboardButton("🎬 单组多广告（1组×N条广告）", callback_data="od_flow:multi_ad")],
+    ]
     await update.message.reply_text(
-        f"✅ 系列名：{name}\n\n请输入广告组数量（1-100）：",
+        f"✅ 系列名：{name}\n\n"
+        f"请选择投放模式：\n"
+        f"• 多广告组：创建多个广告组，每组1条广告（适合测试不同受众）\n"
+        f"• 单组多广告：1个广告组下创建多条不同文案的广告（适合测试文案）",
+        reply_markup=InlineKeyboardMarkup(keyboard),
     )
+    return OD_MODE
+
+
+async def od_mode(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """按钮回调：选择投放模式"""
+    query = update.callback_query
+    await query.answer()
+    flow = query.data.split(":")[1]
+    ctx.chat_data["od_flow_mode"] = flow  # "multi_adset" or "multi_ad"
+
+    if flow == "multi_ad":
+        await query.edit_message_text(
+            f"✅ 模式：单组多广告\n\n"
+            f"请输入广告数量（1-20）：",
+        )
+    else:
+        await query.edit_message_text(
+            f"✅ 模式：多广告组\n\n"
+            f"请输入广告组数量（1-100）：",
+        )
     return OD_COUNT
 
 
 async def od_count(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """收到组数"""
+    """收到数量（广告组数 或 广告条数）"""
     text = update.message.text.strip()
+    flow = ctx.chat_data.get("od_flow_mode", "multi_adset")
+    max_count = 20 if flow == "multi_ad" else 100
+
     try:
         count = int(text)
-        if count < 1 or count > 100:
+        if count < 1 or count > max_count:
             raise ValueError
     except ValueError:
-        await update.message.reply_text("❌ 请输入 1-100 的整数：")
+        await update.message.reply_text(f"❌ 请输入 1-{max_count} 的整数：")
         return OD_COUNT
 
     ctx.chat_data["od_count"] = count
 
+    label = "广告条数" if flow == "multi_ad" else "广告组数"
     await update.message.reply_text(
-        f"✅ 广告组数：{count}\n\n请输入系列日预算（美元）：",
+        f"✅ {label}：{count}\n\n请输入系列日预算（美元）：",
     )
     return OD_BUDGET
 
@@ -986,19 +1020,25 @@ async def od_age(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     # 构造确认摘要
     d = ctx.chat_data
-    mode = d["od_mode"]
     gender_label = {0: "全部", 1: "男", 2: "女"}[d["od_gender"]]
-
-    mode_line = f"💰 系列预算：${d['od_budget']}/天（CBO 自动分配）"
+    flow_mode = d.get("od_flow_mode", "multi_adset")
     event_label = EVENT_CONFIG.get(d.get("od_conversion_event", "SUBSCRIBE"), {}).get("label", "订阅")
+
+    if flow_mode == "multi_ad":
+        count_line = f"🎬 广告数量：{d['od_count']} 条（1个广告组）"
+        mode_desc = "单组多广告"
+    else:
+        count_line = f"📦 广告组：{d['od_count']} 组"
+        mode_desc = "多广告组"
 
     summary = (
         f"📋 请确认广告配置：\n"
         f"{'─' * 24}\n"
-        f"{mode_line}\n"
+        f"🗂 模式：{mode_desc}\n"
+        f"💰 系列预算：${d['od_budget']}/天（CBO 自动分配）\n"
         f"📝 系列名：{d['od_camp_name']}\n"
         f"🎯 转化事件：{event_label}\n"
-        f"📦 广告组：{d['od_count']} 组\n"
+        f"{count_line}\n"
         f"🔗 落地页：{d['od_url']}\n"
         f"🌍 国家：{d['od_country']}\n"
         f"📱 设备：{d['od_device']}\n"
@@ -1030,38 +1070,67 @@ async def od_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     d = ctx.chat_data
     fb = get_fb(update.effective_chat.id)
+    flow_mode = d.get("od_flow_mode", "multi_adset")
 
     await query.edit_message_text("⏳ 正在创建广告系列，请稍候...")
 
     try:
-        camp_id, adset_ids = normal_flow(
-            fb, d["od_camp_name"], d["od_count"],
-            daily_budget_usd=d["od_budget"],
-            country=d["od_country"],
-            device_os=d["od_device"],
-            age_min=d["od_age_min"],
-            age_max=d["od_age_max"],
-            gender=d["od_gender"],
-            conversion_event=d.get("od_conversion_event", "SUBSCRIBE"),
-        )
-        ctx.chat_data["od_cta"] = d.get("od_cta", "SUBSCRIBE")
+        if flow_mode == "multi_ad":
+            # 单组多广告：创建1个广告组
+            camp_id, adset_ids = normal_flow(
+                fb, d["od_camp_name"], 1,
+                daily_budget_usd=d["od_budget"],
+                country=d["od_country"],
+                device_os=d["od_device"],
+                age_min=d["od_age_min"],
+                age_max=d["od_age_max"],
+                gender=d["od_gender"],
+                conversion_event=d.get("od_conversion_event", "SUBSCRIBE"),
+            )
+            # 初始化广告列表，每条广告占一个槽位
+            ctx.chat_data["od_ad_list"] = [None] * d["od_count"]
+            ctx.chat_data["od_ad_idx"] = 0  # 当前正在填写的广告序号
+        else:
+            # 多广告组：创建 N 个广告组
+            camp_id, adset_ids = normal_flow(
+                fb, d["od_camp_name"], d["od_count"],
+                daily_budget_usd=d["od_budget"],
+                country=d["od_country"],
+                device_os=d["od_device"],
+                age_min=d["od_age_min"],
+                age_max=d["od_age_max"],
+                gender=d["od_gender"],
+                conversion_event=d.get("od_conversion_event", "SUBSCRIBE"),
+            )
 
+        ctx.chat_data["od_cta"] = d.get("od_cta", "SUBSCRIBE")
         ctx.chat_data["last_campaign_id"] = camp_id
         ctx.chat_data["last_adset_ids"]   = adset_ids
         ctx.chat_data["last_landing_url"] = d["od_url"]
 
-
         gender_label = {0: "全部", 1: "男", 2: "女"}[d["od_gender"]]
-        await query.edit_message_text(
-            f"✅ 广告系列创建完成！\n\n"
-            f"📋 系列 ID：{camp_id}\n"
-            f"💰 系列预算：${d['od_budget']}/天（CBO 自动分配）\n"
-            f"📦 广告组：{d['od_count']} 组（均为 PAUSED）\n"
-            f"🌍 {d['od_country']} | {d['od_device']} | "
-            f"{d['od_age_min']}-{d['od_age_max']}岁 | {gender_label}\n\n"
-            f"📎 请发送视频或图片素材\n"
-            f"（发 /cancel 取消）",
-        )
+
+        if flow_mode == "multi_ad":
+            adset_id = adset_ids[0]
+            await query.edit_message_text(
+                f"✅ 广告系列创建完成！\n\n"
+                f"📋 系列 ID：{camp_id}\n"
+                f"💰 系列预算：${d['od_budget']}/天（CBO 自动分配）\n"
+                f"🎬 将创建 {d['od_count']} 条广告（广告组 ID：{adset_id}）\n\n"
+                f"📎 第 1 条广告 — 请发送视频或图片素材\n"
+                f"（发 /cancel 取消）",
+            )
+        else:
+            await query.edit_message_text(
+                f"✅ 广告系列创建完成！\n\n"
+                f"📋 系列 ID：{camp_id}\n"
+                f"💰 系列预算：${d['od_budget']}/天（CBO 自动分配）\n"
+                f"📦 广告组：{d['od_count']} 组（均为 PAUSED）\n"
+                f"🌍 {d['od_country']} | {d['od_device']} | "
+                f"{d['od_age_min']}-{d['od_age_max']}岁 | {gender_label}\n\n"
+                f"📎 请发送视频或图片素材\n"
+                f"（发 /cancel 取消）",
+            )
         return OD_MEDIA
     except FBError as e:
         await query.edit_message_text(f"❌ 创建失败：{e}")
@@ -1081,7 +1150,7 @@ async def od_media(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     file_obj = update.message.video or update.message.document or None
     is_photo = False
     if not file_obj and update.message.photo:
-        file_obj = update.message.photo[-1]  # 取最大尺寸
+        file_obj = update.message.photo[-1]
         is_photo = True
 
     if not file_obj:
@@ -1101,23 +1170,56 @@ async def od_media(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
         if is_photo:
             image_hash = fb.upload_image(tmp_path)
-            ctx.chat_data["last_image_hash"] = image_hash
-            ctx.chat_data.pop("last_video_id", None)
+            media_info = {"type": "image", "id": "", "hash": image_hash}
             media_id = image_hash
         else:
             video_id = fb.upload_video(tmp_path, title=file_name)
-            ctx.chat_data["last_video_id"] = video_id
-            ctx.chat_data.pop("last_image_hash", None)
+            media_info = {"type": "video", "id": video_id, "hash": ""}
             media_id = video_id
 
-        await msg.edit_text(
-            f"✅ 素材上传成功！（ID：{media_id}）\n\n"
-            f"📝 请输入广告正文（显示在视频上方）\n"
-            f"发「跳过」使用默认文案\n"
-            f"（发 /cancel 取消）",
-        )
         Path(tmp_path).unlink(missing_ok=True)
-        return OD_TEXT
+
+        flow_mode = ctx.chat_data.get("od_flow_mode", "multi_adset")
+
+        if flow_mode == "multi_ad":
+            idx = ctx.chat_data.get("od_ad_idx", 0)
+            total = ctx.chat_data.get("od_count", 1)
+            # 保存当前素材
+            ctx.chat_data["od_current_media"] = media_info
+
+            if idx == 0:
+                # 第1条广告：手动输入文案
+                await msg.edit_text(
+                    f"✅ 第 {idx+1}/{total} 条素材上传成功！（ID：{media_id}）\n\n"
+                    f"📝 请输入第 {idx+1} 条广告正文\n"
+                    f"发「跳过」使用默认文案\n"
+                    f"（发 /cancel 取消）",
+                )
+                return OD_TEXT
+            else:
+                # 后续广告：问复制方式
+                keyboard = [
+                    [InlineKeyboardButton("🤖 AI 生成变体文案", callback_data="od_copy:ai")],
+                    [InlineKeyboardButton("📋 复制第1条文案", callback_data="od_copy:copy")],
+                    [InlineKeyboardButton("✏️ 手动输入文案", callback_data="od_copy:manual")],
+                ]
+                await msg.edit_text(
+                    f"✅ 第 {idx+1}/{total} 条素材上传成功！\n\n"
+                    f"📝 第 {idx+1} 条广告文案来源：",
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                )
+                return OD_AI_CHOICE
+        else:
+            # 多广告组模式：沿用原来逻辑
+            ctx.chat_data["last_image_hash"] = media_info["hash"] if is_photo else ""
+            ctx.chat_data["last_video_id"] = media_info["id"] if not is_photo else ""
+            await msg.edit_text(
+                f"✅ 素材上传成功！（ID：{media_id}）\n\n"
+                f"📝 请输入广告正文（显示在视频上方）\n"
+                f"发「跳过」使用默认文案\n"
+                f"（发 /cancel 取消）",
+            )
+            return OD_TEXT
     except FBError as e:
         await msg.edit_text(f"❌ 素材上传失败：{e}\n\n请重新发送素材：")
         return OD_MEDIA
@@ -1135,51 +1237,197 @@ async def od_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     else:
         ctx.chat_data["od_ad_text"] = text
 
+    flow_mode = ctx.chat_data.get("od_flow_mode", "multi_adset")
+    idx = ctx.chat_data.get("od_ad_idx", 0) if flow_mode == "multi_ad" else 0
+    total = ctx.chat_data.get("od_count", 1) if flow_mode == "multi_ad" else 0
+
+    label = f"第 {idx+1}/{total} 条 " if flow_mode == "multi_ad" else ""
     await update.message.reply_text(
-        f"✅ 广告正文：{text if text not in ('跳过', 'skip') else '（默认）'}\n\n"
-        f"📝 请输入广告标题（显示在视频下方）\n"
+        f"✅ {label}广告正文：{text if text not in ('跳过', 'skip') else '（默认）'}\n\n"
+        f"📝 请输入{label}广告标题（显示在视频下方）\n"
         f"发「跳过」使用默认标题",
     )
     return OD_TITLE
 
 
 async def od_title(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """收到广告标题，显示最终确认"""
+    """收到广告标题"""
     text = update.message.text.strip()
     default_title = "Se você não quer ganhar, não clique!"
     if text in ("跳过", "skip"):
-        ctx.chat_data["od_ad_title"] = default_title
+        ad_title = default_title
         title_display = f"（默认：{default_title}）"
     else:
-        ctx.chat_data["od_ad_title"] = text
+        ad_title = text
         title_display = text
 
+    ctx.chat_data["od_ad_title"] = ad_title
     d = ctx.chat_data
-    ad_text = d.get("od_ad_text", "")
-    adset_count = len(d.get("last_adset_ids", []))
+    flow_mode = d.get("od_flow_mode", "multi_adset")
 
-    summary = (
-        f"🚀 即将发布广告：\n"
-        f"{'─' * 24}\n"
-        f"📋 系列：{d.get('od_camp_name', '')}\n"
-        f"📦 广告组：{adset_count} 组\n"
-        f"🎬 素材：已上传\n"
-        f"📝 正文：{ad_text or '（空）'}\n"
-        f"🏷 标题：{title_display}\n"
-        f"🔗 落地页：{d.get('od_url', '')}\n"
-        f"{'─' * 24}\n\n"
-        f"⚠️ 点击发布后广告将开始投放并产生费用！"
-    )
+    if flow_mode == "multi_ad":
+        idx = d.get("od_ad_idx", 0)
+        total = d.get("od_count", 1)
+        media_info = d.get("od_current_media", {})
+        ad_list = d.get("od_ad_list", [])
+        ad_list[idx] = {
+            "media": media_info,
+            "text": d.get("od_ad_text", ""),
+            "title": ad_title,
+        }
+        d["od_ad_list"] = ad_list
+        next_idx = idx + 1
 
-    keyboard = [
-        [InlineKeyboardButton("🚀 发布广告", callback_data="od_publish:yes"),
-         InlineKeyboardButton("❌ 取消", callback_data="od_publish:no")],
-    ]
+        if next_idx < total:
+            d["od_ad_idx"] = next_idx
+            await update.message.reply_text(
+                f"✅ 第 {idx+1}/{total} 条广告文案已保存\n\n"
+                f"📎 第 {next_idx+1}/{total} 条广告 — 请发送视频或图片素材\n"
+                f"（发 /cancel 取消）",
+            )
+            return OD_MEDIA
+        else:
+            # 所有广告素材和文案收集完毕，显示发布确认
+            lines = [f"🚀 即将发布 {total} 条广告：\n{'─' * 24}"]
+            for i, ad in enumerate(ad_list):
+                lines.append(
+                    f"广告 {i+1}：{ad['media']['type']} | "
+                    f"正文：{(ad['text'] or '（空）')[:30]} | "
+                    f"标题：{ad['title'][:20]}"
+                )
+            lines.append(f"{'─' * 24}")
+            lines.append(f"🔗 落地页：{d.get('last_landing_url', d.get('od_url', ''))}")
+            lines.append("\n⚠️ 点击发布后广告将开始投放并产生费用！")
+
+            keyboard = [
+                [InlineKeyboardButton("🚀 发布广告", callback_data="od_publish:yes"),
+                 InlineKeyboardButton("❌ 取消", callback_data="od_publish:no")],
+            ]
+            await update.message.reply_text(
+                "\n".join(lines),
+                reply_markup=InlineKeyboardMarkup(keyboard),
+            )
+            return OD_PUBLISH
+    else:
+        # 多广告组模式
+        adset_count = len(d.get("last_adset_ids", []))
+        ad_text = d.get("od_ad_text", "")
+        summary = (
+            f"🚀 即将发布广告：\n"
+            f"{'─' * 24}\n"
+            f"📋 系列：{d.get('od_camp_name', '')}\n"
+            f"📦 广告组：{adset_count} 组\n"
+            f"🎬 素材：已上传\n"
+            f"📝 正文：{ad_text or '（空）'}\n"
+            f"🏷 标题：{title_display}\n"
+            f"🔗 落地页：{d.get('od_url', '')}\n"
+            f"{'─' * 24}\n\n"
+            f"⚠️ 点击发布后广告将开始投放并产生费用！"
+        )
+        keyboard = [
+            [InlineKeyboardButton("🚀 发布广告", callback_data="od_publish:yes"),
+             InlineKeyboardButton("❌ 取消", callback_data="od_publish:no")],
+        ]
+        await update.message.reply_text(
+            summary,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+        return OD_PUBLISH
+
+
+async def od_ai_choice(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """按钮回调：后续广告文案来源（AI / 复制 / 手动）"""
+    query = update.callback_query
+    await query.answer()
+    choice = query.data.split(":")[1]  # "ai" / "copy" / "manual"
+
+    d = ctx.chat_data
+    idx = d.get("od_ad_idx", 1)
+    total = d.get("od_count", 1)
+
+    if choice == "manual":
+        await query.edit_message_text(
+            f"✏️ 第 {idx+1}/{total} 条广告\n\n"
+            f"📝 请输入广告正文：\n"
+            f"（发「跳过」使用默认文案）",
+        )
+        return OD_MANUAL_COPY
+
+    # AI 生成 或 直接复制
+    ad_list = d.get("od_ad_list", [])
+    first_ad = ad_list[0] if ad_list and ad_list[0] else {}
+    orig_text = first_ad.get("text", "")
+    orig_title = first_ad.get("title", "")
+
+    if choice == "ai":
+        await query.edit_message_text(f"🤖 AI 正在生成第 {idx+1}/{total} 条文案变体...")
+        try:
+            from services.llm import generate_ad_copy_variant
+            new_text, new_title = await generate_ad_copy_variant(orig_text, orig_title)
+        except Exception as e:
+            logger.error(f"AI 生成失败: {e}")
+            new_text, new_title = orig_text, orig_title
+    else:
+        # copy
+        new_text, new_title = orig_text, orig_title
+
+    media_info = d.get("od_current_media", {})
+    ad_list[idx] = {"media": media_info, "text": new_text, "title": new_title}
+    d["od_ad_list"] = ad_list
+
+    next_idx = idx + 1
+    if next_idx < total:
+        d["od_ad_idx"] = next_idx
+        tag = "（AI生成）" if choice == "ai" else "（已复制）"
+        await query.edit_message_text(
+            f"✅ 第 {idx+1}/{total} 条文案已保存 {tag}\n"
+            f"正文：{new_text[:40] or '（空）'}\n"
+            f"标题：{new_title[:30]}\n\n"
+            f"📎 第 {next_idx+1}/{total} 条广告 — 请发送视频或图片素材\n"
+            f"（发 /cancel 取消）",
+        )
+        return OD_MEDIA
+    else:
+        # 全部完成，显示发布确认
+        lines = [f"🚀 即将发布 {total} 条广告：\n{'─' * 24}"]
+        for i, ad in enumerate(ad_list):
+            lines.append(
+                f"广告 {i+1}：{ad['media']['type']} | "
+                f"正文：{(ad['text'] or '（空）')[:30]} | "
+                f"标题：{ad['title'][:20]}"
+            )
+        lines.append(f"{'─' * 24}")
+        lines.append(f"🔗 落地页：{d.get('last_landing_url', d.get('od_url', ''))}")
+        lines.append("\n⚠️ 点击发布后广告将开始投放并产生费用！")
+        keyboard = [
+            [InlineKeyboardButton("🚀 发布广告", callback_data="od_publish:yes"),
+             InlineKeyboardButton("❌ 取消", callback_data="od_publish:no")],
+        ]
+        await query.edit_message_text(
+            "\n".join(lines),
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+        return OD_PUBLISH
+
+
+async def od_manual_copy(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """收到手动输入的正文，再问标题"""
+    text = update.message.text.strip()
+    if text in ("跳过", "skip"):
+        ctx.chat_data["od_ad_text"] = ""
+    else:
+        ctx.chat_data["od_ad_text"] = text
+
+    d = ctx.chat_data
+    idx = d.get("od_ad_idx", 0)
+    total = d.get("od_count", 1)
+
     await update.message.reply_text(
-        summary,
-        reply_markup=InlineKeyboardMarkup(keyboard),
+        f"✅ 第 {idx+1}/{total} 条正文已保存\n\n"
+        f"📝 请输入第 {idx+1}/{total} 条广告标题\n"
+        f"（发「跳过」使用默认标题）",
     )
-    return OD_PUBLISH
+    return OD_TITLE
 
 
 async def od_publish(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -1197,40 +1445,65 @@ async def od_publish(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     d = ctx.chat_data
     fb = get_fb(update.effective_chat.id)
-    adset_ids  = d.get("last_adset_ids", [])
-    video_id   = d.get("last_video_id", "")
-    image_hash = d.get("last_image_hash", "")
-    landing    = d.get("last_landing_url", d.get("od_url", ""))
-    camp_id    = d.get("last_campaign_id", "")
-    ad_text    = d.get("od_ad_text", "")
-    ad_title   = d.get("od_ad_title", "Se você não quer ganhar, não clique!")
-
-    if not adset_ids or (not video_id and not image_hash):
-        await query.edit_message_text("❌ 缺少广告组或素材信息。")
-        return ConversationHandler.END
+    flow_mode = d.get("od_flow_mode", "multi_adset")
+    landing   = d.get("last_landing_url", d.get("od_url", ""))
+    camp_id   = d.get("last_campaign_id", "")
+    adset_ids = d.get("last_adset_ids", [])
 
     await query.edit_message_text("⏳ 正在绑定素材并发布广告...")
 
     try:
-        from services.campaign import bind_and_publish
-        creative_id = bind_and_publish(
-            fb=fb,
-            adset_ids=adset_ids,
-            landing_url=landing,
-            message=ad_text,
-            title=ad_title,
-            camp_id=camp_id,
-            video_id=video_id,
-            image_hash=image_hash,
-            cta=d.get("od_cta", "SUBSCRIBE"),
-        )
-        await query.edit_message_text(
-            f"🚀 发布成功！\n\n"
-            f"✅ 创意 ID：{creative_id}\n"
-            f"✅ {len(adset_ids)} 个广告组已启动\n\n"
-            f"FB 审核通常需要 1-4 小时。\n"
-            f"用 /report 查看数据，/automonitor on 开启自动监控。",
-        )
+        if flow_mode == "multi_ad":
+            ad_list = d.get("od_ad_list", [])
+            if not ad_list or not adset_ids:
+                await query.edit_message_text("❌ 缺少广告数据。")
+                return ConversationHandler.END
+
+            from services.campaign import bind_and_publish_multi_ads
+            ad_ids = bind_and_publish_multi_ads(
+                fb=fb,
+                adset_id=adset_ids[0],
+                landing_url=landing,
+                camp_id=camp_id,
+                ad_list=ad_list,
+                cta=d.get("od_cta", "SUBSCRIBE"),
+            )
+            await query.edit_message_text(
+                f"🚀 发布成功！\n\n"
+                f"✅ {len(ad_ids)} 条广告已创建并启动\n"
+                f"广告组 ID：{adset_ids[0]}\n\n"
+                f"FB 审核通常需要 1-4 小时。\n"
+                f"用 /report 查看数据，/automonitor on 开启自动监控。",
+            )
+        else:
+            video_id   = d.get("last_video_id", "")
+            image_hash = d.get("last_image_hash", "")
+            ad_text    = d.get("od_ad_text", "")
+            ad_title   = d.get("od_ad_title", "Se você não quer ganhar, não clique!")
+
+            if not adset_ids or (not video_id and not image_hash):
+                await query.edit_message_text("❌ 缺少广告组或素材信息。")
+                return ConversationHandler.END
+
+            from services.campaign import bind_and_publish
+            creative_id = bind_and_publish(
+                fb=fb,
+                adset_ids=adset_ids,
+                landing_url=landing,
+                message=ad_text,
+                title=ad_title,
+                camp_id=camp_id,
+                video_id=video_id,
+                image_hash=image_hash,
+                cta=d.get("od_cta", "SUBSCRIBE"),
+            )
+            await query.edit_message_text(
+                f"🚀 发布成功！\n\n"
+                f"✅ 创意 ID：{creative_id}\n"
+                f"✅ {len(adset_ids)} 个广告组已启动\n\n"
+                f"FB 审核通常需要 1-4 小时。\n"
+                f"用 /report 查看数据，/automonitor on 开启自动监控。",
+            )
     except FBError as e:
         await query.edit_message_text(f"❌ 发布失败：{e}")
 

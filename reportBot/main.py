@@ -1,4 +1,4 @@
-"""Report Bot — BM/广告户封禁自动通知"""
+"""Report Bot — BM/广告户封禁自动通知 + 广告数据报表"""
 import asyncio
 import logging
 import os
@@ -11,6 +11,7 @@ from telegram.ext import (
     ConversationHandler, CallbackQueryHandler, filters,
     ContextTypes,
 )
+from report_web import start_web_server, get_or_create_token
 
 load_dotenv()
 logging.basicConfig(
@@ -22,6 +23,8 @@ logger = logging.getLogger(__name__)
 GRAPH = "https://graph.facebook.com/v20.0"
 BOT_TOKEN = os.getenv("REPORT_BOT_TOKEN", "")
 CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL", "300"))
+DASHBOARD_HOST = os.getenv("DASHBOARD_HOST", "localhost:8081")
+DASHBOARD_PORT = int(os.getenv("DASHBOARD_PORT", "8081"))
 
 # 状态常量
 ST_BM_ID, ST_TOKEN, ST_CONFIRM = range(3)
@@ -58,13 +61,15 @@ async def start_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             f"每 {CHECK_INTERVAL} 秒检查一次\n\n"
             f"/monitor — 重新设置监控\n"
             f"/stop — 停止监控\n"
-            f"/status — 查看所有账户状态"
+            f"/status — 查看所有账户状态\n"
+            f"/report — 查看广告数据报表"
         )
     else:
         await update.message.reply_text(
             "🤖 广告户封禁监控机器人\n\n"
             "发 /monitor 开始设置监控\n"
-            "发 /status 手动查一次状态"
+            "发 /status 手动查一次状态\n"
+            "发 /report 查看广告数据报表"
         )
 
 
@@ -255,6 +260,34 @@ async def status_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await msg.edit_text("\n".join(lines))
 
 
+async def report_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """/report — 打开广告数据报表网页"""
+    chat_id = update.effective_chat.id
+    info = monitor_data.get(chat_id)
+
+    if not info or not info.get("accounts"):
+        await update.message.reply_text(
+            "⚠️ 还没设置监控，请先发 /monitor 配置 BM ID 和 Token。\n"
+            "设置完成后再发 /report 查看报表。"
+        )
+        return
+
+    token = get_or_create_token(chat_id)
+    url = f"http://{DASHBOARD_HOST}/report?key={token}"
+
+    await update.message.reply_text(
+        f"📊 广告数据报表\n\n"
+        f"复制以下链接到浏览器打开：\n"
+        f"{url}\n\n"
+        f"包含：\n"
+        f"• 所有 BM 下广告账户余额与状态\n"
+        f"• 每个账户的系列和广告组数据\n"
+        f"• 消耗、CPM、CTR、注册率、订阅率、ROAS 等全量指标\n"
+        f"• 支持今天 / 昨天 / 近7天 / 近30天切换\n\n"
+        f"监控 {len(info['accounts'])} 个广告账户",
+    )
+
+
 # ── 后台监控循环 ──────────────────────────────────────────────
 
 async def check_loop(app):
@@ -350,6 +383,7 @@ def build_app():
     app.add_handler(CommandHandler("start", start_cmd))
     app.add_handler(CommandHandler("stop", stop_cmd))
     app.add_handler(CommandHandler("status", status_cmd))
+    app.add_handler(CommandHandler("report", report_cmd))
 
     # 监控设置对话
     conv = ConversationHandler(
@@ -364,9 +398,10 @@ def build_app():
     )
     app.add_handler(conv)
 
-    # 后台循环
+    # 后台循环 + Web 服务器
     async def post_init(application):
         asyncio.create_task(check_loop(application))
+        await start_web_server(monitor_data, host="0.0.0.0", port=DASHBOARD_PORT)
 
     app.post_init = post_init
 

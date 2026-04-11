@@ -97,3 +97,61 @@ def bind_and_publish(fb: FBClient,
         fb.set_campaign_status(camp_id, "ACTIVE")
 
     return creative_id
+
+
+def bind_and_publish_multi_ads(
+    fb: FBClient,
+    adset_id: str,
+    landing_url: str,
+    camp_id: str,
+    ad_list: list[dict],
+    cta: str = "SUBSCRIBE",
+) -> list[str]:
+    """
+    在单个广告组里创建多条广告，每条广告有独立的文案和素材。
+    ad_list: [{"media": {"type": "video"/"image", "id": str, "hash": str}, "text": str, "title": str}, ...]
+    返回已创建的 ad_id 列表
+    """
+    ad_ids = []
+    for i, ad_info in enumerate(ad_list):
+        media = ad_info.get("media", {})
+        text = ad_info.get("text", "")
+        title = ad_info.get("title", "")
+        media_type = media.get("type", "video")
+        media_id = media.get("id", "")
+        image_hash = media.get("hash", "")
+
+        creative_name = f"creative-ad{i+1}-{media_id[:8] if media_id else image_hash[:8]}"
+
+        if media_type == "image" or image_hash:
+            creative_id = fb.create_image_creative(
+                name=creative_name,
+                image_hash=image_hash,
+                landing_url=landing_url,
+                message=text,
+                title=title,
+                cta=cta,
+            )
+        else:
+            creative_id = fb.create_video_creative(
+                name=creative_name,
+                video_id=media_id,
+                landing_url=landing_url,
+                message=text,
+                title=title,
+                cta=cta,
+            )
+
+        ad_id = fb.create_ad(
+            adset_id=adset_id,
+            creative_id=creative_id,
+            name=f"ad-{i+1}-{adset_id[-6:]}",
+        )
+        ad_ids.append(ad_id)
+
+    fb.activate_all([adset_id])
+    fb.activate_all(ad_ids)
+    if camp_id:
+        fb.set_campaign_status(camp_id, "ACTIVE")
+
+    return ad_ids

@@ -55,6 +55,41 @@ async def ask_llm(chat_id: int, user_message: str, reply_message=None) -> str:
         return f"调用大模型出错: {e}"
 
 
+async def generate_ad_copy_variant(original_text: str, original_title: str) -> tuple[str, str]:
+    """
+    基于原始广告文案生成一个变体（单次调用，不写入 chat 历史）
+    返回 (new_text, new_title)，失败时回退到原始文案
+    """
+    try:
+        llm = _get_llm()
+        prompt = (
+            "你是一名 Facebook 广告文案专家。\n"
+            "请根据下面的广告正文和标题，生成一个**内容相近但措辞不同**的变体，"
+            "保持相同语言、相同风格和相同落地意图。\n"
+            "只输出以下格式，不要任何其他内容：\n"
+            "正文：<新正文>\n"
+            "标题：<新标题>\n\n"
+            f"原正文：{original_text or '（空）'}\n"
+            f"原标题：{original_title or '（空）'}"
+        )
+        resp = await llm.chat.completions.create(
+            model=MODEL,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        output = resp.choices[0].message.content.strip()
+        new_text = original_text
+        new_title = original_title
+        for line in output.splitlines():
+            if line.startswith("正文："):
+                new_text = line[3:].strip()
+            elif line.startswith("标题："):
+                new_title = line[3:].strip()
+        return new_text, new_title
+    except Exception as e:
+        logger.error(f"generate_ad_copy_variant 失败: {e}")
+        return original_text, original_title
+
+
 async def _stream_reply(history: list, msg) -> str:
     """流式接收 LLM 回复，每隔一段时间更新 Telegram 消息"""
     llm = _get_llm()

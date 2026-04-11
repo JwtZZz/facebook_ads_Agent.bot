@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>广告账户报表</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#f0f2f5; color:#222; font-family:'Microsoft YaHei','PingFang SC',sans-serif; padding:16px; }
+
+/* 顶部 */
+.header { background:#fff; padding:14px 20px; border-radius:8px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+.header h1 { font-size:17px; font-weight:700; }
+.header-right { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.dot { width:9px; height:9px; border-radius:50%; display:inline-block; margin-right:4px; }
+.dot.green{background:#52c41a;} .dot.yellow{background:#faad14;} .dot.red{background:#f5222d;}
+#statusText { font-size:13px; color:#888; }
+#updateTime { font-size:12px; color:#bbb; }
+
+/* 日期切换 */
+.date-btns { display:flex; gap:5px; }
+.date-btn { padding:5px 13px; border:1px solid #d9d9d9; border-radius:4px; background:#fff; font-size:13px; cursor:pointer; color:#555; transition:all .15s; }
+.date-btn:hover { border-color:#1890ff; color:#1890ff; }
+.date-btn.active { background:#1890ff; color:#fff; border-color:#1890ff; }
+.refresh-btn { padding:5px 14px; background:#52c41a; color:#fff; border:none; border-radius:4px; font-size:13px; cursor:pointer; }
+.refresh-btn:hover { background:#389e0d; }
+.refresh-btn:disabled { background:#d9d9d9; cursor:not-allowed; }
+
+/* 账户卡片 */
+.account-cards { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
+.acct-card { background:#fff; border-radius:8px; padding:14px 18px; box-shadow:0 1px 3px rgba(0,0,0,.08); min-width:220px; flex:1; border-left:4px solid #1890ff; }
+.acct-card.banned { border-left-color:#f5222d; }
+.acct-card.warn { border-left-color:#faad14; }
+.acct-card h3 { font-size:14px; font-weight:700; margin-bottom:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.acct-card .acct-sub { font-size:11px; color:#aaa; margin-bottom:8px; }
+.acct-chip { display:inline-block; padding:1px 7px; border-radius:3px; font-size:11px; font-weight:600; margin-bottom:8px; }
+.acct-chip.ok { background:#f6ffed; color:#52c41a; border:1px solid #b7eb8f; }
+.acct-chip.banned { background:#fff2f0; color:#f5222d; border:1px solid #ffa39e; }
+.acct-chip.warn { background:#fff7e6; color:#fa8c16; border:1px solid #ffd591; }
+.acct-chip.unknown { background:#f5f5f5; color:#888; border:1px solid #d9d9d9; }
+.acct-nums { display:grid; grid-template-columns:1fr 1fr; gap:4px 8px; }
+.acct-num { font-size:12px; }
+.acct-num .lbl { color:#aaa; font-size:11px; }
+.acct-num .val { font-weight:700; }
+
+/* 主表格区 */
+.section { background:#fff; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; overflow:hidden; }
+.sec-hdr { padding:11px 18px; border-bottom:1px solid #f0f0f0; display:flex; align-items:center; gap:8px; background:#fafafa; }
+.sec-hdr h2 { font-size:14px; font-weight:700; }
+.sec-hdr .sec-sub { font-size:12px; color:#aaa; }
+
+.table-wrap { overflow-x:auto; }
+.table-wrap::-webkit-scrollbar { height:5px; }
+.table-wrap::-webkit-scrollbar-thumb { background:#d9d9d9; border-radius:3px; }
+table { width:100%; border-collapse:collapse; font-size:12px; min-width:900px; }
+th { background:#fafafa; text-align:right; padding:8px 10px; font-weight:600; color:#666; border-bottom:2px solid #f0f0f0; white-space:nowrap; cursor:pointer; user-select:none; position:sticky; top:0; z-index:1; }
+th:first-child { text-align:left; position:sticky; left:0; z-index:2; min-width:160px; }
+th:hover { background:#f0f0f0; }
+.sort-icon { font-size:10px; margin-left:2px; color:#ccc; }
+th.sort-asc .sort-icon, th.sort-desc .sort-icon { color:#1890ff; }
+td { padding:8px 10px; border-bottom:1px solid #f5f5f5; text-align:right; white-space:nowrap; }
+td:first-child { text-align:left; position:sticky; left:0; background:#fff; z-index:1; }
+
+/* 系列行 */
+tr.camp-row { cursor:pointer; }
+tr.camp-row:hover td { background:#e6f7ff; }
+tr.camp-row:hover td:first-child { background:#e6f7ff; }
+tr.camp-row td:first-child { font-weight:600; font-size:12px; }
+tr.camp-row td:first-child::before { content:'▶ '; font-size:9px; color:#bbb; }
+tr.camp-row.expanded td:first-child::before { content:'▼ '; color:#1890ff; }
+
+/* 广告组行 */
+tr.adset-row { display:none; }
+tr.adset-row.show { display:table-row; }
+tr.adset-row td { background:#fafbfc; color:#555; }
+tr.adset-row td:first-child { background:#fafbfc; padding-left:24px; font-weight:400; color:#888; }
+
+/* 汇总行 */
+tr.subtotal td { background:#e6f7ff; font-weight:700; color:#1890ff; border-top:2px solid #bae7ff; }
+tr.subtotal td:first-child { background:#e6f7ff; }
+tr.grand-total td { background:#fff7e6; font-weight:700; color:#d46b08; border-top:2px solid #ffd591; }
+tr.grand-total td:first-child { background:#fff7e6; }
+
+/* 状态标签 */
+.tag { display:inline-block; padding:1px 6px; border-radius:3px; font-size:11px; font-weight:600; }
+.tag.active { background:#f6ffed; color:#52c41a; border:1px solid #b7eb8f; }
+.tag.paused { background:#f5f5f5; color:#888; border:1px solid #d9d9d9; }
+.tag.review { background:#fff7e6; color:#fa8c16; border:1px solid #ffd591; }
+.tag.bad    { background:#fff2f0; color:#f5222d; border:1px solid #ffa39e; }
+
+/* 数值颜色 */
+.spend { color:#f5222d; }
+.revenue { color:#52c41a; }
+.roas-good { color:#52c41a; font-weight:700; }
+.roas-bad  { color:#f5222d; }
+
+.empty { text-align:center; padding:60px; color:#bbb; font-size:14px; }
+.loading { text-align:center; padding:40px; color:#1890ff; font-size:13px; }
+
+@media(max-width:600px) { body{padding:8px;} .acct-card{min-width:100%;} }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>广告账户报表</h1>
+  <div class="header-right">
+    <div class="date-btns">
+      <button class="date-btn active" data-p="today">今天</button>
+      <button class="date-btn" data-p="yesterday">昨天</button>
+      <button class="date-btn" data-p="last_7d">近7天</button>
+      <button class="date-btn" data-p="last_30d">近30天</button>
+    </div>
+    <button class="refresh-btn" id="refreshBtn" onclick="fetchReport()">刷新</button>
+    <div>
+      <span class="dot yellow" id="dot"></span>
+      <span id="statusText">连接中...</span>
+      <span id="updateTime"></span>
+    </div>
+  </div>
+</div>
+
+<div id="acctCards" class="account-cards"></div>
+<div id="mainContent"><div class="empty" id="emptyState">等待数据加载...</div></div>
+
+<script>
+const key = new URLSearchParams(location.search).get('key');
+if (!key) document.body.innerHTML = '<div class="empty">链接无效，请从 Telegram /report 命令获取链接</div>';
+
+let ws, retryDelay = 1000, currentPreset = 'today';
+let sortCol = 'spend', sortDir = 'desc';
+let lastPayload = null;
+
+// 表格列定义
+const COLS = [
+  { key:'name',       label:'名称/ID',   get:r=>r._name||'',       fmt:(v,r)=>esc(v),            type:'str' },
+  { key:'status',     label:'状态',      get:r=>r._status||'',      fmt:(v,r)=>statusTag(v),      type:'str' },
+  { key:'spend',      label:'消耗',      get:r=>r.spend||0,         fmt:v=>`<span class="spend">$${n(v)}</span>`, type:'num' },
+  { key:'impressions',label:'展示',      get:r=>r.impressions||0,   fmt:v=>ni(v),                 type:'num' },
+  { key:'clicks',     label:'点击',      get:r=>r.clicks||0,        fmt:v=>ni(v),                 type:'num' },
+  { key:'cpm',        label:'CPM',       get:r=>r.cpm||0,           fmt:v=>'$'+n(v),              type:'num' },
+  { key:'ctr',        label:'CTR',       get:r=>r.ctr||0,           fmt:v=>n(v,2)+'%',            type:'num' },
+  { key:'cpc',        label:'CPC',       get:r=>r.cpc||0,           fmt:v=>'$'+n(v),              type:'num' },
+  { key:'regs',       label:'注册',      get:r=>r.regs||0,          fmt:v=>ni(v),                 type:'num' },
+  { key:'reg_rate',   label:'注册率',    get:r=>r.reg_rate||0,      fmt:v=>n(v,1)+'%',            type:'num' },
+  { key:'subs',       label:'订阅',      get:r=>r.subs||0,          fmt:v=>ni(v),                 type:'num' },
+  { key:'sub_rate',   label:'订阅率',    get:r=>r.sub_rate||0,      fmt:v=>n(v,1)+'%',            type:'num' },
+  { key:'purchases',  label:'首充',      get:r=>r.purchases||0,     fmt:v=>ni(v),                 type:'num' },
+  { key:'cpa',        label:'CPA',       get:r=>r.cpa||0,           fmt:v=>v?'$'+n(v):'-',        type:'num' },
+  { key:'revenue',    label:'充值',      get:r=>r.revenue||0,       fmt:v=>`<span class="revenue">$${n(v)}</span>`, type:'num' },
+  { key:'roas',       label:'ROAS',      get:r=>r.roas||0,          fmt:v=>roasTag(v),            type:'num' },
+];
+
+function connect() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(proto + '//' + location.host + '/report-ws');
+  ws.onopen  = () => ws.send(JSON.stringify({ type:'auth', key }));
+  ws.onmessage = e => {
+    const d = JSON.parse(e.data);
+    if (d.type === 'auth_ok')       { setDot('green','已连接'); retryDelay=1000; fetchReport(); }
+    else if (d.type === 'auth_error') setDot('red','密钥无效');
+    else if (d.type === 'loading')  { showLoading(); document.getElementById('refreshBtn').disabled=true; }
+    else if (d.type === 'report_update') { lastPayload=d; render(d); document.getElementById('refreshBtn').disabled=false; }
+    else if (d.type === 'error')    { showError(d.message); document.getElementById('refreshBtn').disabled=false; }
+    else if (d.type === 'ping')     ws.send(JSON.stringify({type:'pong'}));
+  };
+  ws.onclose = () => { setDot('yellow','重连中...'); setTimeout(()=>{ retryDelay=Math.min(retryDelay*2,30000); connect(); }, retryDelay); };
+  ws.onerror = () => ws.close();
+}
+
+function fetchReport() {
+  if (ws && ws.readyState === WebSocket.OPEN)
+    ws.send(JSON.stringify({ type:'fetch_report', date_preset: currentPreset }));
+}
+
+function setDot(c,t){ document.getElementById('dot').className='dot '+c; document.getElementById('statusText').textContent=t; }
+function showLoading(){ document.getElementById('mainContent').innerHTML='<div class="loading">正在拉取数据，请稍候...</div>'; }
+function showError(msg){ document.getElementById('mainContent').innerHTML=`<div class="empty">拉取失败：${esc(msg)}</div>`; }
+function n(v,d=2){ return Number(v||0).toFixed(d); }
+function ni(v){ return Number(v||0).toLocaleString(); }
+function esc(s){ const d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
+
+function statusTag(v){
+  const M={'ACTIVE':'投放中','PAUSED':'已暂停','PENDING_REVIEW':'审核中','IN_PROCESS':'审核中','DISAPPROVED':'未通过','WITH_ISSUES':'有问题','UNKNOWN':'未知'};
+  const label=M[v]||v||'未知';
+  const cls=(v==='ACTIVE')?'active':(v==='PENDING_REVIEW'||v==='IN_PROCESS')?'review':(v==='DISAPPROVED'||v==='WITH_ISSUES')?'bad':'paused';
+  return `<span class="tag ${cls}">${label}</span>`;
+}
+function roasTag(v){
+  const cls = v>=100?'roas-good':'roas-bad';
+  return `<span class="${cls}">${n(v,1)}%</span>`;
+}
+function acctCls(s){ return s===1?'ok':s===2?'banned':(s===7||s===9||s===3)?'warn':'unknown'; }
+function acctIcon(s){ return s===1?'✅':s===2?'⛔':'⚠️'; }
+function acctCardCls(s){ return s===2?'banned':(s!==1)?'warn':''; }
+
+function buildThs(){
+  return COLS.map(col=>{
+    let cls='', icon='↕';
+    if(sortCol===col.key){ cls=sortDir==='asc'?'sort-asc':'sort-desc'; icon=sortDir==='asc'?'↑':'↓'; }
+    return `<th class="${cls}" data-key="${col.key}">${col.label}<span class="sort-icon">${icon}</span></th>`;
+  }).join('');
+}
+
+function makeRow(r, cls, tds){ return `<tr class="${cls}">${tds}</tr>`; }
+
+function campTds(c){
+  const totRow = { ...c.totals, _name: c.campaign_name, _status: c.status };
+  return COLS.map(col => {
+    if(col.key==='name') return `<td>${esc(c.campaign_name)}</td>`;
+    if(col.key==='status') return `<td>${statusTag(c.status)}</td>`;
+    return `<td>${col.fmt(col.get(totRow))}</td>`;
+  }).join('');
+}
+
+function adsetTds(as){
+  const m = as.metrics;
+  return COLS.map(col => {
+    if(col.key==='name') return `<td>${esc(as.adset_name)}</td>`;
+    if(col.key==='status') return `<td>—</td>`;
+    return `<td>${col.fmt(col.get(m))}</td>`;
+  }).join('');
+}
+
+function subtotalTds(label, totals){
+  return COLS.map(col => {
+    if(col.key==='name') return `<td>${label}</td>`;
+    if(col.key==='status') return `<td>—</td>`;
+    return `<td>${col.fmt(col.get(totals))}</td>`;
+  }).join('');
+}
+
+function agg(arr){
+  if(!arr.length) return {};
+  const spend=arr.reduce((s,m)=>s+(m.spend||0),0);
+  const impressions=arr.reduce((s,m)=>s+(m.impressions||0),0);
+  const clicks=arr.reduce((s,m)=>s+(m.clicks||0),0);
+  const regs=arr.reduce((s,m)=>s+(m.regs||0),0);
+  const subs=arr.reduce((s,m)=>s+(m.subs||0),0);
+  const purchases=arr.reduce((s,m)=>s+(m.purchases||0),0);
+  const revenue=arr.reduce((s,m)=>s+(m.revenue||0),0);
+  const trials=arr.reduce((s,m)=>s+(m.trials||0),0);
+  return {
+    spend:round2(spend), impressions, clicks,
+    cpc:round2(clicks>0?spend/clicks:0),
+    ctr:round2(impressions>0?clicks/impressions*100:0),
+    cpm:round2(impressions>0?spend/impressions*1000:0),
+    regs:Math.round(regs), reg_rate:round1(clicks>0?regs/clicks*100:0),
+    subs:Math.round(subs), sub_rate:round1(clicks>0?subs/clicks*100:0),
+    trials:Math.round(trials),
+    purchases:Math.round(purchases), cpa:round2(purchases>0?spend/purchases:0),
+    revenue:round2(revenue), roas:round1(spend>0?revenue/spend*100:0),
+  };
+}
+function round2(v){ return Math.round(v*100)/100; }
+function round1(v){ return Math.round(v*10)/10; }
+
+function sortCamps(camps){
+  const col = COLS.find(c=>c.key===sortCol);
+  if(!col) return camps;
+  return [...camps].sort((a,b)=>{
+    const va = col.key==='name'?(a.campaign_name||''):(a.totals[col.key]||0);
+    const vb = col.key==='name'?(b.campaign_name||''):(b.totals[col.key]||0);
+    if(col.type==='num') return sortDir==='asc'?va-vb:vb-va;
+    return sortDir==='asc'?String(va).localeCompare(String(vb)):String(vb).localeCompare(String(va));
+  });
+}
+
+function render(data){
+  document.getElementById('emptyState')?.remove();
+  document.getElementById('updateTime').textContent = ' · 更新于 '+new Date(data.timestamp).toLocaleTimeString();
+
+  const accounts = data.accounts||[];
+
+  // 账户卡片
+  document.getElementById('acctCards').innerHTML = accounts.map(a=>{
+    const cls=acctCls(a.status);
+    const cardCls=acctCardCls(a.status);
+    const balStr = a.spend_cap>0
+      ? `${a.currency} ${n(a.balance)} / 上限 ${n(a.spend_cap)}`
+      : `${a.currency} ${n(a.balance)}`;
+    const todaySpend = (a.campaigns||[]).reduce((s,c)=>s+(c.totals?.spend||0),0);
+    return `<div class="acct-card ${cardCls}">
+      <div class="acct-sub">${esc(a.account_id)}${a.bm_id?` · BM ${esc(a.bm_id)}`:''}</div>
+      <h3 title="${esc(a.name)}">${esc(a.name)}</h3>
+      <span class="acct-chip ${cls}">${acctIcon(a.status)} ${esc(a.status_text)}</span>
+      <div class="acct-nums">
+        <div class="acct-num"><div class="lbl">余额</div><div class="val" style="color:#1890ff">${balStr}</div></div>
+        <div class="acct-num"><div class="lbl">账期消耗</div><div class="val" style="color:#888">$${n(a.amount_spent)}</div></div>
+        <div class="acct-num"><div class="lbl">今日消耗</div><div class="val" style="color:#f5222d">$${n(todaySpend)}</div></div>
+        <div class="acct-num"><div class="lbl">系列数</div><div class="val">${(a.campaigns||[]).length}</div></div>
+      </div>
+    </div>`;
+  }).join('');
+
+  if(!accounts.length){
+    document.getElementById('mainContent').innerHTML='<div class="empty">暂无广告账户数据</div>';
+    return;
+  }
+
+  const ths = buildThs();
+
+  // 全局合计（多账户时显示）
+  let grandHtml = '';
+  if(accounts.length>1){
+    const allTotals = accounts.flatMap(a=>(a.campaigns||[]).map(c=>c.totals));
+    const grand = agg(allTotals);
+    const grandTds = subtotalTds(`全账户合计（${accounts.length} 个账户）`, grand);
+    grandHtml = `<div class="section">
+      <div class="sec-hdr"><h2>全账户合计</h2></div>
+      <div class="table-wrap"><table><thead><tr>${ths}</tr></thead>
+      <tbody><tr class="grand-total">${grandTds}</tr></tbody></table></div>
+    </div>`;
+  }
+
+  // 每个账户一个 section
+  const sectionsHtml = accounts.map(acct=>{
+    const camps = sortCamps(acct.campaigns||[]);
+    let rows='';
+    camps.forEach((c,ci)=>{
+      const uid=`${acct.account_id.replace(/[^a-z0-9]/gi,'')}-${ci}`;
+      rows += `<tr class="camp-row" onclick="toggle('${uid}')">${campTds(c)}</tr>`;
+      (c.adsets||[]).forEach(as=>{
+        rows += `<tr class="adset-row" data-g="${uid}">${adsetTds(as)}</tr>`;
+      });
+    });
+    const acctTot = agg(camps.map(c=>c.totals));
+    const subTds = subtotalTds(`小计（${camps.length} 个系列）`, acctTot);
+    const cls=acctCardCls(acct.status);
+    return `<div class="section">
+      <div class="sec-hdr">
+        <h2>${esc(acct.name)}</h2>
+        <span class="acct-chip ${acctCls(acct.status)}" style="font-size:11px;">${acctIcon(acct.status)} ${esc(acct.status_text)}</span>
+        <span class="sec-sub">${esc(acct.account_id)} · 余额 ${acct.currency} ${n(acct.balance)}</span>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr>${ths}</tr></thead>
+        <tbody>${rows}<tr class="subtotal">${subTds}</tr></tbody>
+      </table></div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('mainContent').innerHTML = grandHtml + sectionsHtml;
+  bindSort();
+}
+
+function toggle(uid){
+  const campRow = document.querySelector(`tr.camp-row[onclick="toggle('${uid}')"]`);
+  const adsetRows = document.querySelectorAll(`tr.adset-row[data-g="${uid}"]`);
+  const expanded = campRow.classList.toggle('expanded');
+  adsetRows.forEach(r=>r.classList.toggle('show', expanded));
+}
+
+function bindSort(){
+  document.querySelectorAll('th[data-key]').forEach(th=>{
+    th.onclick=()=>{
+      const k=th.dataset.key;
+      if(sortCol===k) sortDir=sortDir==='asc'?'desc':'asc';
+      else { sortCol=k; sortDir='desc'; }
+      if(lastPayload) render(lastPayload);
+    };
+  });
+}
+
+document.querySelectorAll('.date-btn').forEach(btn=>{
+  btn.onclick=()=>{
+    document.querySelectorAll('.date-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    currentPreset=btn.dataset.p;
+    fetchReport();
+  };
+});
+
+if(key) connect();
+</script>
+</body>
+</html>
