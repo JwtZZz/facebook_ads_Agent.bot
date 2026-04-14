@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>批量上传素材</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#f5f5f5;color:#333;font-family:'Microsoft YaHei','PingFang SC',sans-serif;padding:20px;}
+
+.header{background:#fff;padding:16px 24px;border-radius:8px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,0.1);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;}
+.header h1{font-size:18px;}
+.header .info{font-size:13px;color:#888;}
+
+.slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-bottom:20px;}
+
+.slot{background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.1);overflow:hidden;}
+.slot-header{padding:10px 16px;background:#fafafa;border-bottom:1px solid #f0f0f0;font-size:13px;font-weight:600;color:#666;display:flex;justify-content:space-between;align-items:center;}
+.slot-header .badge{font-size:11px;padding:2px 8px;border-radius:10px;}
+.badge.empty{background:#f5f5f5;color:#999;}
+.badge.ready{background:#f6ffed;color:#52c41a;border:1px solid #b7eb8f;}
+
+.drop-zone{padding:30px 16px;text-align:center;border:2px dashed #d9d9d9;margin:12px;border-radius:8px;cursor:pointer;transition:all .2s;min-height:120px;display:flex;flex-direction:column;justify-content:center;align-items:center;}
+.drop-zone:hover,.drop-zone.dragover{border-color:#1890ff;background:#e6f7ff;}
+.drop-zone.has-file{border-color:#52c41a;background:#f6ffed;border-style:solid;}
+.drop-zone .icon{font-size:32px;margin-bottom:8px;}
+.drop-zone .hint{font-size:12px;color:#999;}
+.drop-zone .filename{font-size:13px;color:#52c41a;font-weight:600;word-break:break-all;}
+.drop-zone input[type=file]{display:none;}
+
+.slot-form{padding:0 16px 16px;}
+.slot-form label{display:block;font-size:12px;color:#999;margin:8px 0 4px;}
+.slot-form textarea,.slot-form input{width:100%;padding:6px 10px;border:1px solid #d9d9d9;border-radius:4px;font-size:13px;font-family:inherit;}
+.slot-form textarea{height:60px;resize:vertical;}
+
+.progress{height:4px;background:#f0f0f0;border-radius:2px;margin:8px 12px;overflow:hidden;display:none;}
+.progress.show{display:block;}
+.progress-bar{height:100%;background:#1890ff;width:0;transition:width .3s;}
+
+.actions{background:#fff;padding:16px 24px;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.1);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;}
+.publish-btn{padding:10px 32px;background:#52c41a;color:#fff;border:none;border-radius:6px;font-size:15px;font-weight:600;cursor:pointer;}
+.publish-btn:hover{background:#389e0d;}
+.publish-btn:disabled{background:#d9d9d9;cursor:not-allowed;}
+.status-msg{font-size:13px;color:#888;}
+.status-msg.error{color:#f5222d;}
+.status-msg.success{color:#52c41a;}
+
+.result{background:#fff;padding:16px 24px;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-top:16px;}
+.result h3{font-size:15px;color:#52c41a;margin-bottom:10px;}
+.result-item{padding:6px 0;border-bottom:1px solid #f5f5f5;font-size:13px;}
+
+.batch-zone{background:#fff;border:2px dashed #d9d9d9;border-radius:8px;padding:24px;text-align:center;cursor:pointer;margin-bottom:16px;transition:all .2s;color:#888;font-size:14px;}
+.batch-zone:hover,.batch-zone.dragover{border-color:#1890ff;background:#e6f7ff;color:#1890ff;}
+
+@media(max-width:600px){body{padding:10px;}.slots{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>批量上传素材</h1>
+  <div class="info" id="taskInfo">加载中...</div>
+</div>
+
+<div class="batch-zone" id="batchZone" ondragover="batchDragOver(event)" ondragleave="batchDragLeave(event)" ondrop="batchDrop(event)" onclick="document.getElementById('batchFile').click()">
+  <span style="font-size:28px;">📦</span>
+  <div>拖拽多个文件到此处批量上传，自动分配到各占位符</div>
+  <div style="font-size:12px;color:#bbb;">或点击选择多个文件</div>
+  <input type="file" id="batchFile" accept="video/*,image/*" multiple onchange="batchSelect(event)" style="display:none;">
+</div>
+<div class="slots" id="slotsContainer"></div>
+
+<div class="actions">
+  <div>
+    <span class="status-msg" id="statusMsg"></span>
+  </div>
+  <button class="publish-btn" id="publishBtn" onclick="publish()" disabled>一键发布</button>
+</div>
+
+<div class="result" id="resultBox" style="display:none;">
+  <h3>发布成功</h3>
+  <div id="resultList"></div>
+</div>
+
+<script>
+const taskId = new URLSearchParams(location.search).get('task');
+if(!taskId) document.body.innerHTML='<div style="text-align:center;padding:60px;color:#999;">链接无效</div>';
+
+let taskInfo = null;
+
+async function loadTask(){
+  const resp = await fetch('/upload/info?task='+taskId);
+  if(!resp.ok){ document.body.innerHTML='<div style="text-align:center;padding:60px;color:#999;">任务不存在或已过期</div>'; return; }
+  taskInfo = await resp.json();
+
+  if(taskInfo.published){
+    document.body.innerHTML='<div style="text-align:center;padding:60px;color:#52c41a;font-size:16px;">该任务已发布完成</div>';
+    return;
+  }
+
+  const modeLabel = taskInfo.flow_mode==='multi_ad'?'单组多广告':'多广告组';
+  document.getElementById('taskInfo').textContent = `${modeLabel} · ${taskInfo.count} 个位置 · 系列 ${taskInfo.campaign_id}`;
+
+  renderSlots();
+}
+
+function renderSlots(){
+  const container = document.getElementById('slotsContainer');
+  container.innerHTML = '';
+
+  for(let i=0; i<taskInfo.count; i++){
+    const slot = taskInfo.slots[i];
+    const filled = slot && slot.filled;
+    const badgeCls = filled?'ready':'empty';
+    const badgeText = filled?'已上传':'待上传';
+    const label = taskInfo.flow_mode==='multi_ad'?`第 ${i+1} 条广告`:`广告组 ${i+1}`;
+
+    const div = document.createElement('div');
+    div.className = 'slot';
+    div.innerHTML = `
+      <div class="slot-header">
+        <span>${label}</span>
+        <span class="badge ${badgeCls}" id="badge_${i}">${badgeText}</span>
+      </div>
+      <div class="drop-zone${filled?' has-file':''}" id="drop_${i}" onclick="document.getElementById('file_${i}').click()" ondragover="dragOver(event,${i})" ondragleave="dragLeave(event,${i})" ondrop="dropFile(event,${i})">
+        ${filled
+          ? `<div class="filename">${slot.media_type==='video'?'🎬':'🖼'} 已上传</div>`
+          : `<div class="icon">📎</div><div class="hint">拖拽文件到此处<br>或点击选择</div>`}
+        <input type="file" id="file_${i}" accept="video/*,image/*" onchange="selectFile(event,${i})">
+      </div>
+      <div class="progress" id="progress_${i}"><div class="progress-bar" id="bar_${i}"></div></div>
+      <div class="slot-form">
+        <label>广告文案${i===0?' <span style="color:#1890ff;font-size:11px;">（填这里自动同步到后面）</span>':''}</label>
+        <textarea id="text_${i}" placeholder="输入广告正文..." oninput="syncText(${i})">${esc(slot?.text||'')}</textarea>
+        <label>广告标题${i===0?' <span style="color:#1890ff;font-size:11px;">（填这里自动同步到后面）</span>':''}</label>
+        <input type="text" id="title_${i}" placeholder="输入标题..." value="${esc(slot?.title||'')}" oninput="syncTitle(${i})">
+      </div>`;
+    container.appendChild(div);
+  }
+  checkReady();
+}
+
+// 批量上传
+function batchDragOver(e){ e.preventDefault(); document.getElementById('batchZone').classList.add('dragover'); }
+function batchDragLeave(e){ document.getElementById('batchZone').classList.remove('dragover'); }
+function batchDrop(e){
+  e.preventDefault();
+  document.getElementById('batchZone').classList.remove('dragover');
+  const files = [...e.dataTransfer.files].filter(f=>f.type.startsWith('video/')||f.type.startsWith('image/'));
+  batchUpload(files);
+}
+function batchSelect(e){
+  const files = [...e.target.files];
+  batchUpload(files);
+  e.target.value='';
+}
+async function batchUpload(files){
+  if(!files.length) return;
+  const MAX_CONCURRENT = 3;
+  const queue = [];
+  let slotIdx = 0;
+
+  for(const file of files){
+    while(slotIdx < taskInfo.count && taskInfo.slots[slotIdx] && taskInfo.slots[slotIdx].filled) slotIdx++;
+    if(slotIdx >= taskInfo.count) break;
+    queue.push({file, slot: slotIdx});
+    slotIdx++;
+  }
+
+  // 控制并发：最多同时上传 MAX_CONCURRENT 个
+  let running = 0, idx = 0;
+  await new Promise(resolve => {
+    function next(){
+      if(idx >= queue.length && running === 0){ resolve(); return; }
+      while(running < MAX_CONCURRENT && idx < queue.length){
+        const {file, slot} = queue[idx++];
+        running++;
+        uploadFile(file, slot).finally(()=>{ running--; next(); });
+      }
+    }
+    next();
+  });
+}
+
+function dragOver(e,i){ e.preventDefault(); document.getElementById('drop_'+i).classList.add('dragover'); }
+function dragLeave(e,i){ document.getElementById('drop_'+i).classList.remove('dragover'); }
+
+function dropFile(e,i){
+  e.preventDefault();
+  document.getElementById('drop_'+i).classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if(file) uploadFile(file, i);
+}
+
+function selectFile(e,i){
+  const file = e.target.files[0];
+  if(file) uploadFile(file, i);
+}
+
+async function uploadFile(file, slot){
+  const drop = document.getElementById('drop_'+slot);
+  const progress = document.getElementById('progress_'+slot);
+  const bar = document.getElementById('bar_'+slot);
+  const badge = document.getElementById('badge_'+slot);
+
+  progress.classList.add('show');
+  bar.style.width = '30%';
+  drop.innerHTML = `<div class="hint">上传中... ${file.name}</div><input type="file" id="file_${slot}" accept="video/*,image/*" onchange="selectFile(event,${slot})" style="display:none">`;
+
+  const form = new FormData();
+  form.append('file', file);
+
+  try {
+    const resp = await fetch(`/upload/file?task=${taskId}&slot=${slot}`, { method:'POST', body:form });
+    bar.style.width = '100%';
+    const data = await resp.json();
+
+    if(data.ok){
+      const icon = data.media_type==='video'?'🎬':'🖼';
+      drop.classList.add('has-file');
+      drop.innerHTML = `<div class="filename">${icon} ${file.name}</div><input type="file" id="file_${slot}" accept="video/*,image/*" onchange="selectFile(event,${slot})" style="display:none">`;
+      badge.className = 'badge ready';
+      badge.textContent = '已上传';
+      taskInfo.slots[slot] = { filled:true, media_type:data.media_type, text:'', title:'' };
+    } else {
+      drop.innerHTML = `<div class="hint" style="color:#f5222d">上传失败: ${data.error}</div><input type="file" id="file_${slot}" accept="video/*,image/*" onchange="selectFile(event,${slot})" style="display:none">`;
+    }
+  } catch(e) {
+    drop.innerHTML = `<div class="hint" style="color:#f5222d">上传失败: ${e.message}</div><input type="file" id="file_${slot}" accept="video/*,image/*" onchange="selectFile(event,${slot})" style="display:none">`;
+  }
+
+  setTimeout(()=>{ progress.classList.remove('show'); bar.style.width='0'; }, 1000);
+  checkReady();
+}
+
+function checkReady(){
+  const filled = taskInfo.slots.filter(s=>s&&s.filled).length;
+  const btn = document.getElementById('publishBtn');
+  btn.disabled = filled===0;
+  btn.textContent = `一键发布（${filled}/${taskInfo.count}）`;
+}
+
+async function publish(){
+  const btn = document.getElementById('publishBtn');
+  const msg = document.getElementById('statusMsg');
+  btn.disabled = true;
+  msg.className = 'status-msg';
+  msg.textContent = '正在保存文案...';
+
+  // 先保存所有文案
+  const slotsData = [];
+  for(let i=0; i<taskInfo.count; i++){
+    slotsData.push({
+      slot: i,
+      text: document.getElementById('text_'+i)?.value||'',
+      title: document.getElementById('title_'+i)?.value||'',
+    });
+  }
+
+  try {
+    await fetch(`/upload/text?task=${taskId}`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({slots:slotsData}),
+    });
+
+    msg.textContent = '正在发布广告...';
+
+    const resp = await fetch(`/upload/publish?task=${taskId}`, {method:'POST'});
+    const data = await resp.json();
+
+    if(data.ok){
+      msg.className = 'status-msg success';
+      msg.textContent = '发布成功！';
+      const box = document.getElementById('resultBox');
+      box.style.display = 'block';
+      document.getElementById('resultList').innerHTML = data.results.map(r =>
+        `<div class="result-item">广告 ${r.slot+1}: Ad ID ${r.ad_id}${r.adset_id?' · Adset '+r.adset_id:''}</div>`
+      ).join('');
+      btn.textContent = '已发布';
+    } else {
+      msg.className = 'status-msg error';
+      msg.textContent = '发布失败: ' + data.error;
+      btn.disabled = false;
+    }
+  } catch(e) {
+    msg.className = 'status-msg error';
+    msg.textContent = '发布失败: ' + e.message;
+    btn.disabled = false;
+  }
+}
+
+function syncText(fromIdx){
+  if(fromIdx!==0) return;
+  const val = document.getElementById('text_0').value;
+  for(let i=1; i<taskInfo.count; i++){
+    const el = document.getElementById('text_'+i);
+    if(el && !el.dataset.edited) el.value = val;
+  }
+}
+function syncTitle(fromIdx){
+  if(fromIdx!==0) return;
+  const val = document.getElementById('title_0').value;
+  for(let i=1; i<taskInfo.count; i++){
+    const el = document.getElementById('title_'+i);
+    if(el && !el.dataset.edited) el.value = val;
+  }
+}
+
+function esc(s){ const d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
+
+if(taskId) loadTask();
+</script>
+</body>
+</html>

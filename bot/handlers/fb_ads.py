@@ -653,9 +653,10 @@ async def _finish_account_selection(update: Update, ctx, edit_msg=None):
     except Exception as e:
         logger.warning(f"查询像素失败: {e}")
 
-    # 查所有主页
+    # 查所有主页（4种方式依次尝试）
     pages = []
     try:
+        # 方式1: 通过 BM owned_pages
         resp = _requests.get(f"{GRAPH}/act_{acc_id}", params={
             "access_token": token, "fields": "business",
         })
@@ -666,11 +667,29 @@ async def _finish_account_selection(update: Update, ctx, edit_msg=None):
                 "access_token": token, "fields": "id,name", "limit": 20,
             })
             pages = resp.json().get("data", [])
+        # 方式2: promote_pages
         if not pages:
             resp = _requests.get(f"{GRAPH}/act_{acc_id}/promote_pages", params={
                 "access_token": token, "fields": "id,name", "limit": 20,
             })
             pages = resp.json().get("data", [])
+        # 方式3: me/accounts（个人用户 token）
+        if not pages:
+            resp = _requests.get(f"{GRAPH}/me/accounts", params={
+                "access_token": token, "fields": "id,name", "limit": 20,
+            })
+            pages = resp.json().get("data", [])
+        # 方式4: 系统用户 assigned_pages
+        if not pages:
+            me_resp = _requests.get(f"{GRAPH}/me", params={
+                "access_token": token, "fields": "id",
+            })
+            me_id = me_resp.json().get("id", "")
+            if me_id:
+                resp = _requests.get(f"{GRAPH}/{me_id}/assigned_pages", params={
+                    "access_token": token, "fields": "id,name", "limit": 20,
+                })
+                pages = resp.json().get("data", [])
     except Exception as e:
         logger.warning(f"查询主页失败: {e}")
 
@@ -1108,30 +1127,40 @@ async def od_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         ctx.chat_data["last_adset_ids"]   = adset_ids
         ctx.chat_data["last_landing_url"] = d["od_url"]
 
-        gender_label = {0: "全部", 1: "男", 2: "女"}[d["od_gender"]]
+        # 创建上传任务，返回网页链接
+        from services.web import create_upload_task
+        task_id = create_upload_task(
+            chat_id=update.effective_chat.id,
+            campaign_id=camp_id,
+            adset_ids=adset_ids,
+            landing_url=d["od_url"],
+            cta=d.get("od_cta", "SUBSCRIBE"),
+            count=d["od_count"],
+            fb_config=fb.cfg,
+            flow_mode=flow_mode,
+        )
 
-        if flow_mode == "multi_ad":
-            adset_id = adset_ids[0]
-            await query.edit_message_text(
-                f"✅ 广告系列创建完成！\n\n"
-                f"📋 系列 ID：{camp_id}\n"
-                f"💰 系列预算：${d['od_budget']}/天（CBO 自动分配）\n"
-                f"🎬 将创建 {d['od_count']} 条广告（广告组 ID：{adset_id}）\n\n"
-                f"📎 第 1 条广告 — 请发送视频或图片素材\n"
-                f"（发 /cancel 取消）",
-            )
-        else:
-            await query.edit_message_text(
-                f"✅ 广告系列创建完成！\n\n"
-                f"📋 系列 ID：{camp_id}\n"
-                f"💰 系列预算：${d['od_budget']}/天（CBO 自动分配）\n"
-                f"📦 广告组：{d['od_count']} 组（均为 PAUSED）\n"
-                f"🌍 {d['od_country']} | {d['od_device']} | "
-                f"{d['od_age_min']}-{d['od_age_max']}岁 | {gender_label}\n\n"
-                f"📎 请发送视频或图片素材\n"
-                f"（发 /cancel 取消）",
-            )
-        return OD_MEDIA
+        host = os.getenv("DASHBOARD_HOST", "localhost:8080")
+        upload_url = f"http://{host}/upload?task={task_id}"
+
+        gender_label = {0: "全部", 1: "男", 2: "女"}[d["od_gender"]]
+        mode_label = "单组多广告" if flow_mode == "multi_ad" else "多广告组"
+
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📎 打开素材上传页面", url=upload_url)]
+        ])
+
+        await query.edit_message_text(
+            f"✅ 广告系列创建完成！\n\n"
+            f"📋 系列 ID：{camp_id}\n"
+            f"💰 系列预算：${d['od_budget']}/天（CBO 自动分配）\n"
+            f"🗂 模式：{mode_label} × {d['od_count']}\n"
+            f"🌍 {d['od_country']} | {d['od_device']} | "
+            f"{d['od_age_min']}-{d['od_age_max']}岁 | {gender_label}\n\n"
+            f"📎 点击下方按钮上传素材并发布：",
+            reply_markup=keyboard,
+        )
+        return ConversationHandler.END
     except FBError as e:
         await query.edit_message_text(f"❌ 创建失败：{e}")
         return ConversationHandler.END

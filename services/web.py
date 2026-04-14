@@ -1,8 +1,10 @@
-"""Web 服务：Dashboard HTTP + WebSocket 实时推送"""
+"""Web 服务：Dashboard HTTP + WebSocket 实时推送 + 素材上传"""
 import asyncio
 import json
 import logging
 import os
+import secrets
+import tempfile
 from pathlib import Path
 
 import aiohttp
@@ -134,12 +136,234 @@ async def handle_ws(request: web.Request) -> web.WebSocketResponse:
     return ws
 
 
+# ── 素材上传任务 ──────────────────────────────────────────────
+
+# 上传任务: {task_id: {chat_id, campaign_id, adset_ids, landing_url, cta, count, fb_config, slots: [...]}}
+upload_tasks: dict[str, dict] = {}
+
+
+def create_upload_task(chat_id: int, campaign_id: str, adset_ids: list,
+                       landing_url: str, cta: str, count: int,
+                       fb_config, flow_mode: str) -> str:
+    task_id = secrets.token_urlsafe(16)
+    upload_tasks[task_id] = {
+        "chat_id": chat_id,
+        "campaign_id": campaign_id,
+        "adset_ids": adset_ids,
+        "landing_url": landing_url,
+        "cta": cta,
+        "count": count,
+        "fb_config": fb_config,
+        "flow_mode": flow_mode,
+        "slots": [None] * count,  # [{media_path, media_type, text, title}, ...]
+        "published": False,
+    }
+    return task_id
+
+
+async def handle_upload_page(request: web.Request) -> web.Response:
+    """GET /upload?task=xxx — 素材上传页面"""
+    task_id = request.query.get("task", "")
+    if not task_id or task_id not in upload_tasks:
+        return web.Response(text="Invalid or expired task link", status=403)
+    html_path = STATIC_DIR / "upload.html"
+    if not html_path.exists():
+        return web.Response(text="upload.html not found", status=404)
+    return web.Response(text=html_path.read_text(encoding="utf-8"), content_type="text/html")
+
+
+async def handle_upload_info(request: web.Request) -> web.Response:
+    """GET /upload/info?task=xxx — 获取任务信息"""
+    task_id = request.query.get("task", "")
+    task = upload_tasks.get(task_id)
+    if not task:
+        return web.json_response({"error": "Invalid task"}, status=403)
+    return web.json_response({
+        "count": task["count"],
+        "flow_mode": task["flow_mode"],
+        "campaign_id": task["campaign_id"],
+        "landing_url": task["landing_url"],
+        "slots": [
+            {"filled": s is not None, "media_type": (s or {}).get("media_type", ""),
+             "text": (s or {}).get("text", ""), "title": (s or {}).get("title", "")}
+            for s in task["slots"]
+        ],
+        "published": task["published"],
+    })
+
+
+async def handle_upload_file(request: web.Request) -> web.Response:
+    """POST /upload/file?task=xxx&slot=0 — 上传单个素材文件"""
+    task_id = request.query.get("task", "")
+    task = upload_tasks.get(task_id)
+    if not task:
+        return web.json_response({"error": "Invalid task"}, status=403)
+    if task["published"]:
+        return web.json_response({"error": "Already published"}, status=400)
+
+    slot_idx = int(request.query.get("slot", "0"))
+    if slot_idx < 0 or slot_idx >= task["count"]:
+        return web.json_response({"error": "Invalid slot"}, status=400)
+
+    reader = await request.multipart()
+    field = await reader.next()
+    if not field:
+        return web.json_response({"error": "No file"}, status=400)
+
+    filename = field.filename or "media"
+    is_image = any(filename.lower().endswith(ext) for ext in [".jpg", ".jpeg", ".png", ".gif", ".webp"])
+    suffix = ".jpg" if is_image else ".mp4"
+
+    # 保存到临时文件
+    tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+    size = 0
+    while True:
+        chunk = await field.read_chunk()
+        if not chunk:
+            break
+        size += len(chunk)
+        tmp.write(chunk)
+    tmp.close()
+
+    # 上传到 FB（在线程池中执行，不阻塞事件循环）
+    from fb import FBClient
+    fb = FBClient(task["fb_config"])
+    loop = asyncio.get_event_loop()
+    try:
+        if is_image:
+            media_hash = await loop.run_in_executor(None, fb.upload_image, tmp.name)
+            media_info = {"media_type": "image", "media_id": "", "media_hash": media_hash, "media_path": tmp.name}
+        else:
+            video_id = await loop.run_in_executor(None, fb.upload_video, tmp.name, filename)
+            media_info = {"media_type": "video", "media_id": video_id, "media_hash": "", "media_path": tmp.name}
+    except Exception as e:
+        Path(tmp.name).unlink(missing_ok=True)
+        return web.json_response({"error": str(e)}, status=500)
+
+    # 保留已有的 text/title
+    old = task["slots"][slot_idx]
+    media_info["text"] = (old or {}).get("text", "")
+    media_info["title"] = (old or {}).get("title", "")
+    task["slots"][slot_idx] = media_info
+
+    return web.json_response({"ok": True, "slot": slot_idx, "media_type": media_info["media_type"]})
+
+
+async def handle_upload_text(request: web.Request) -> web.Response:
+    """POST /upload/text?task=xxx — 保存文案和标题"""
+    task_id = request.query.get("task", "")
+    task = upload_tasks.get(task_id)
+    if not task:
+        return web.json_response({"error": "Invalid task"}, status=403)
+
+    body = await request.json()
+    slots_data = body.get("slots", [])
+    for item in slots_data:
+        idx = item.get("slot", 0)
+        if 0 <= idx < task["count"] and task["slots"][idx]:
+            task["slots"][idx]["text"] = item.get("text", "")
+            task["slots"][idx]["title"] = item.get("title", "")
+
+    return web.json_response({"ok": True})
+
+
+async def handle_upload_publish(request: web.Request) -> web.Response:
+    """POST /upload/publish?task=xxx — 一键发布所有广告"""
+    task_id = request.query.get("task", "")
+    task = upload_tasks.get(task_id)
+    if not task:
+        return web.json_response({"error": "Invalid task"}, status=403)
+    if task["published"]:
+        return web.json_response({"error": "Already published"}, status=400)
+
+    # 检查所有 slot 是否填满
+    filled = [s for s in task["slots"] if s is not None]
+    if not filled:
+        return web.json_response({"error": "No media uploaded"}, status=400)
+
+    from fb import FBClient
+    from services.campaign import bind_and_publish
+    fb = FBClient(task["fb_config"])
+
+    results = []
+    try:
+        if task["flow_mode"] == "multi_ad":
+            # 单组多广告：一个广告组下创建多条广告
+            adset_id = task["adset_ids"][0]
+            for i, slot in enumerate(task["slots"]):
+                if not slot:
+                    continue
+                text = slot.get("text", "")
+                title = slot.get("title", "")
+                video_id = slot.get("media_id", "")
+                image_hash = slot.get("media_hash", "")
+
+                if image_hash:
+                    creative_id = fb.create_image_creative(
+                        name=f"creative-{i}", image_hash=image_hash,
+                        landing_url=task["landing_url"], message=text,
+                        title=title, cta=task["cta"])
+                else:
+                    creative_id = fb.create_video_creative(
+                        name=f"creative-{i}", video_id=video_id,
+                        landing_url=task["landing_url"], message=text,
+                        title=title, cta=task["cta"])
+
+                ad_id = fb.create_ad(adset_id=adset_id, creative_id=creative_id, name=f"ad-{i}")
+                fb.set_ad_status(ad_id, "ACTIVE")
+                results.append({"slot": i, "ad_id": ad_id, "creative_id": creative_id})
+
+            # 激活广告组和系列
+            fb.set_adset_status(adset_id, "ACTIVE")
+            fb.set_campaign_status(task["campaign_id"], "ACTIVE")
+        else:
+            # 多广告组：每个广告组绑一个素材
+            for i, adset_id in enumerate(task["adset_ids"]):
+                slot = task["slots"][i] if i < len(task["slots"]) else task["slots"][0]
+                if not slot:
+                    slot = filled[0]  # fallback 用第一个有素材的
+
+                text = slot.get("text", "")
+                title = slot.get("title", "")
+                video_id = slot.get("media_id", "")
+                image_hash = slot.get("media_hash", "")
+
+                if image_hash:
+                    creative_id = fb.create_image_creative(
+                        name=f"creative-{i}", image_hash=image_hash,
+                        landing_url=task["landing_url"], message=text,
+                        title=title, cta=task["cta"])
+                else:
+                    creative_id = fb.create_video_creative(
+                        name=f"creative-{i}", video_id=video_id,
+                        landing_url=task["landing_url"], message=text,
+                        title=title, cta=task["cta"])
+
+                ad_id = fb.create_ad(adset_id=adset_id, creative_id=creative_id, name=f"ad-{i}")
+                fb.set_ad_status(ad_id, "ACTIVE")
+                fb.set_adset_status(adset_id, "ACTIVE")
+                results.append({"slot": i, "adset_id": adset_id, "ad_id": ad_id})
+
+            fb.set_campaign_status(task["campaign_id"], "ACTIVE")
+
+        task["published"] = True
+        return web.json_response({"ok": True, "results": results})
+
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+
 # ── App 工厂 ───────────────────────────────────────────────────
 
 def create_web_app() -> web.Application:
-    app = web.Application()
+    app = web.Application(client_max_size=100 * 1024 * 1024)  # 100MB max upload
     app.router.add_get("/dashboard", handle_dashboard)
     app.router.add_get("/ws", handle_ws)
+    app.router.add_get("/upload", handle_upload_page)
+    app.router.add_get("/upload/info", handle_upload_info)
+    app.router.add_post("/upload/file", handle_upload_file)
+    app.router.add_post("/upload/text", handle_upload_text)
+    app.router.add_post("/upload/publish", handle_upload_publish)
     return app
 
 
