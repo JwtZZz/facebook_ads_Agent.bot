@@ -25,12 +25,8 @@ from bot.handlers.fb_ads import (
     od_media, od_text, od_title, od_ai_choice, od_manual_copy, od_publish, od_cancel,
 )
 from bot.handlers.go_flow import (
-    GO_TOKEN, GO_ACCOUNTS, GO_PAGE, GO_PIXEL, GO_EVENT,
-    GO_URL_PICK, GO_URL_INPUT, GO_COUNTRY, GO_DEVICE, GO_GENDER,
-    GO_AGE, GO_BUDGET, GO_COUNT, GO_NAME, GO_CONFIRM,
-    go_start, go_token_input, go_account_toggle, go_page, go_pixel,
-    go_event, go_url_pick, go_url_input, go_country, go_device,
-    go_gender, go_age, go_budget, go_count, go_name, go_confirm, go_cancel,
+    GO_TOKEN, GO_ACCOUNTS, GO_PAGE, GO_PIXEL,
+    go_start, go_token_input, go_account_toggle, go_page, go_pixel, go_cancel,
 )
 from bot.handlers.media import upload_video_cmd, video_confirm_callback
 from bot.handlers.adspower import (
@@ -144,25 +140,14 @@ def build_app():
     )
     app.add_handler(ads_conv)
 
-    # 新版批量投放 /go — 多账户 fanout
+    # 新版批量投放 /go — 精简到 4 步，其他配置在网页填
     go_conv = ConversationHandler(
         entry_points=[CommandHandler("go", go_start)],
         states={
-            GO_TOKEN:      [MessageHandler(filters.TEXT & ~filters.COMMAND, go_token_input)],
-            GO_ACCOUNTS:   [CallbackQueryHandler(go_account_toggle, pattern=r"^go_acc_")],
-            GO_PAGE:       [CallbackQueryHandler(go_page, pattern=r"^go_page:")],
-            GO_PIXEL:      [CallbackQueryHandler(go_pixel, pattern=r"^go_pixel:")],
-            GO_EVENT:      [CallbackQueryHandler(go_event, pattern=r"^go_event:")],
-            GO_URL_PICK:   [CallbackQueryHandler(go_url_pick, pattern=r"^go_url:")],
-            GO_URL_INPUT:  [MessageHandler(filters.TEXT & ~filters.COMMAND, go_url_input)],
-            GO_COUNTRY:    [CallbackQueryHandler(go_country, pattern=r"^go_country:")],
-            GO_DEVICE:     [CallbackQueryHandler(go_device, pattern=r"^go_device:")],
-            GO_GENDER:     [CallbackQueryHandler(go_gender, pattern=r"^go_gender:")],
-            GO_AGE:        [CallbackQueryHandler(go_age, pattern=r"^go_age:")],
-            GO_BUDGET:     [MessageHandler(filters.TEXT & ~filters.COMMAND, go_budget)],
-            GO_COUNT:      [MessageHandler(filters.TEXT & ~filters.COMMAND, go_count)],
-            GO_NAME:       [MessageHandler(filters.TEXT & ~filters.COMMAND, go_name)],
-            GO_CONFIRM:    [CallbackQueryHandler(go_confirm, pattern=r"^go_confirm:")],
+            GO_TOKEN:    [MessageHandler(filters.TEXT & ~filters.COMMAND, go_token_input)],
+            GO_ACCOUNTS: [CallbackQueryHandler(go_account_toggle, pattern=r"^go_acc_")],
+            GO_PAGE:     [CallbackQueryHandler(go_page, pattern=r"^go_page:")],
+            GO_PIXEL:    [CallbackQueryHandler(go_pixel, pattern=r"^go_pixel:")],
         },
         fallbacks=[CommandHandler("cancel", go_cancel)],
         conversation_timeout=600,

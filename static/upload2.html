@@ -8,190 +8,367 @@
 :root {
   --acc-col-width: 180px;
   --left-col-width: 200px;
-  --primary: #1890ff;
-  --success: #52c41a;
-  --warning: #faad14;
-  --danger: #ff4d4f;
-  --border: #e8e8e8;
-  --bg: #f5f5f5;
+  --primary: #111;
+  --primary-hover: #333;
+  --success: #16a34a;
+  --warning: #d97706;
+  --danger: #dc2626;
+  --border: #e5e7eb;
+  --border-light: #f3f4f6;
+  --bg: #ffffff;
+  --bg-subtle: #f9fafb;
+  --text: #111827;
+  --text-muted: #6b7280;
+  --text-faint: #9ca3af;
+  --radius: 6px;
 }
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
+
 body {
   background: var(--bg);
-  color: #333;
-  font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
-  padding: 16px;
+  color: var(--text);
+  font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
   font-size: 13px;
+  line-height: 1.5;
 }
-h1 { font-size: 18px; }
-h3 { font-size: 14px; margin-bottom: 8px; color: #666; }
 
-/* 顶部栏 */
+/* ── 顶部导航栏 ── */
 .top-bar {
   background: #fff;
-  padding: 14px 20px;
-  border-radius: 8px;
-  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  padding: 0 28px;
+  height: 52px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-  flex-wrap: wrap;
-  gap: 10px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  gap: 16px;
 }
-.top-bar .info { color: #888; font-size: 12px; }
+
+h1 {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.top-bar .info {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin-top: 1px;
+}
+
 .progress-wrap {
-  background: #eee;
-  border-radius: 4px;
-  height: 8px;
-  width: 200px;
+  background: var(--border-light);
+  border-radius: 99px;
+  height: 4px;
+  width: 160px;
   overflow: hidden;
 }
+
 .progress-bar {
-  background: var(--primary);
+  background: var(--text);
   height: 100%;
   width: 0;
-  transition: width .3s;
+  transition: width .3s ease;
 }
 
-/* 拖拽区 */
+#progressLabel {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 5px;
+  text-align: right;
+}
+
+/* ── 页面主体 ── */
+.page-body {
+  padding: 24px 28px;
+  max-width: 100%;
+}
+
+/* ── 拖拽区 ── */
 .drop-zone-top {
-  background: #fff;
-  border: 2px dashed #d9d9d9;
-  border-radius: 8px;
-  padding: 24px;
+  background: var(--bg-subtle);
+  border: 1.5px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 28px 20px;
   text-align: center;
   cursor: pointer;
-  margin-bottom: 12px;
-  transition: all .2s;
-  color: #888;
+  margin-bottom: 20px;
+  transition: border-color .15s, background .15s;
+  color: var(--text-muted);
 }
+
 .drop-zone-top:hover,
 .drop-zone-top.dragover {
-  border-color: var(--primary);
-  background: #e6f7ff;
-  color: var(--primary);
+  border-color: var(--text);
+  background: #f3f4f6;
+  color: var(--text);
 }
-.drop-zone-top .icon { font-size: 28px; margin-bottom: 4px; }
 
-/* 折叠段 */
-.section {
-  background: #fff;
-  border-radius: 8px;
-  margin-bottom: 12px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+.drop-zone-top .icon {
+  font-size: 24px;
+  margin-bottom: 6px;
+  opacity: .6;
 }
+
+.drop-zone-top .sub {
+  font-size: 11px;
+  color: var(--text-faint);
+  margin-top: 4px;
+}
+
+/* ── 折叠段 ── */
+.section {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+  background: #fff;
+}
+
 .section-header {
-  padding: 12px 16px;
+  padding: 11px 16px;
   cursor: pointer;
-  font-weight: 600;
-  color: #333;
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--text);
   border-bottom: 1px solid var(--border);
   user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
+
+.section-header::before {
+  content: '';
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-size: contain;
+  background-repeat: no-repeat;
+  transition: transform .2s;
+}
+
+.section.collapsed .section-header::before {
+  transform: rotate(-90deg);
+}
+
 .section-body {
-  padding: 12px 16px;
+  padding: 16px;
   overflow-x: auto;
 }
+
 .section.collapsed .section-body { display: none; }
 .section.collapsed .section-header { border-bottom: none; }
 
-/* 账户配置区 — 每列一个账户 */
-.config-grid {
-  display: grid;
-  grid-template-columns: repeat(var(--acc-count, 1), minmax(var(--acc-col-width), 1fr));
-  gap: 12px;
-  min-width: min-content;
-}
-.config-card {
+/* ── 全局设置栏（顶部简单输入） ── */
+.global-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
   border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 10px;
-  background: #fafafa;
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+  margin-bottom: 16px;
+  flex-wrap: wrap;
 }
-.config-card h4 {
-  font-size: 13px;
-  color: var(--primary);
-  margin-bottom: 6px;
+.global-bar .field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
 }
-.config-card .meta {
-  font-size: 11px;
-  color: #999;
-  line-height: 1.5;
-  margin-bottom: 6px;
-  word-break: break-all;
-}
-.config-card label {
-  font-size: 11px;
-  color: #666;
-  display: block;
-  margin-top: 4px;
-}
-.config-card textarea,
-.config-card input {
-  width: 100%;
+.global-bar input {
   padding: 5px 8px;
-  border: 1px solid #d9d9d9;
+  border: 1px solid var(--border);
   border-radius: 4px;
   font-size: 12px;
   font-family: inherit;
+  background: #fff;
+  color: var(--text);
+  outline: none;
 }
-.config-card textarea {
-  min-height: 48px;
+.global-bar input:focus { border-color: var(--text); }
+.global-bar input[type="number"] { width: 60px; text-align: center; }
+.global-bar input.base-name { width: 220px; }
+
+/* ── 账户配置卡片（每个账户占一整行） ── */
+.config-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.config-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  background: #fff;
+}
+
+.config-card .card-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-light);
+}
+.config-card .card-head h4 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.config-card .card-head .alias {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.config-card .card-head .id {
+  font-size: 10px;
+  color: var(--text-faint);
+  margin-left: auto;
+}
+
+/* 字段行：label + 控件 横向排列 */
+.card-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px 14px;
+  margin-bottom: 10px;
+}
+.card-row .field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.card-row .field label {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: .03em;
+}
+.card-row .field select,
+.card-row .field input {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: inherit;
+  background: #fff;
+  color: var(--text);
+  outline: none;
+  transition: border-color .15s;
+}
+.card-row .field select:focus,
+.card-row .field input:focus { border-color: var(--text); }
+.card-row .field .static {
+  padding: 6px 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  word-break: break-all;
+}
+.card-row .field .static.mono {
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.card-row .field .age-range { display: flex; align-items: center; gap: 4px; }
+.card-row .field .age-range input { width: 48px; text-align: center; }
+
+.card-row.full { grid-template-columns: 1fr; }
+
+.card-row textarea {
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: inherit;
+  background: #fff;
+  color: var(--text);
+  outline: none;
+  min-height: 52px;
   resize: vertical;
+  transition: border-color .15s;
 }
-.config-card.synced textarea,
-.config-card.synced input {
-  background: #fafafa;
-  color: #888;
-}
+.card-row textarea:focus { border-color: var(--text); }
+
 .synced-hint {
   font-size: 10px;
   color: var(--warning);
-  margin-top: 2px;
+  margin-top: 3px;
 }
 
-/* 上传表格 */
-.upload-grid-wrap {
-  overflow-x: auto;
+.card-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
 }
+.card-actions .btn-ghost {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.card-actions .btn-ghost:hover { color: var(--text); border-color: var(--text); }
+
+/* ── 上传表格 ── */
+.upload-grid-wrap { overflow-x: auto; }
+
 .upload-grid {
   display: grid;
   grid-template-columns: var(--left-col-width) repeat(var(--acc-count, 1), minmax(var(--acc-col-width), 1fr));
   min-width: min-content;
+  border-top: 1px solid var(--border);
+  border-left: 1px solid var(--border);
 }
+
 .upload-grid > div {
-  border: 1px solid var(--border);
-  border-left: none;
-  border-top: none;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
   padding: 8px;
-  min-height: 70px;
+  min-height: 72px;
 }
+
 .upload-grid > .col-head,
 .upload-grid > .row-head {
-  background: #fafafa;
-  font-weight: 600;
+  background: var(--bg-subtle);
+  font-weight: 500;
   font-size: 12px;
+  color: var(--text-muted);
 }
+
 .upload-grid > .row-head {
   position: sticky;
   left: 0;
   z-index: 1;
-  border-left: 1px solid var(--border);
 }
+
 .upload-grid > .col-head {
   position: sticky;
   top: 0;
   z-index: 2;
+  min-height: 44px;
 }
+
 .upload-grid > .corner {
   position: sticky;
   top: 0;
   left: 0;
   z-index: 3;
-  background: #eee;
-  border-left: 1px solid var(--border);
-  border-top: 1px solid var(--border);
+  background: var(--border-light);
+  font-size: 11px;
+  color: var(--text-faint);
 }
 
 .row-head {
@@ -202,152 +379,193 @@ h3 { font-size: 14px; margin-bottom: 8px; color: #666; }
   gap: 4px;
   position: relative;
 }
+
 .row-head .preview {
   max-width: 140px;
-  max-height: 80px;
+  max-height: 78px;
   object-fit: contain;
   background: #000;
-  border-radius: 4px;
+  border-radius: 3px;
   pointer-events: none;
 }
+
 .row-head .filename {
   font-size: 10px;
-  color: #666;
+  color: var(--text-muted);
   word-break: break-all;
   text-align: center;
-  line-height: 1.2;
+  line-height: 1.3;
   max-width: 100%;
 }
+
 .row-head .clear-row-btn {
   position: absolute;
   top: 4px;
   right: 4px;
-  background: rgba(0,0,0,0.4);
+  background: rgba(0,0,0,0.35);
   color: #fff;
   border: none;
   border-radius: 50%;
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12px;
+  line-height: 18px;
+  text-align: center;
   display: none;
+  padding: 0;
 }
+
 .row-head:hover .clear-row-btn { display: block; }
+
 .row-head.empty {
-  color: #ccc;
+  color: var(--text-faint);
   font-size: 11px;
 }
 
+/* ── 单元格状态 ── */
 .cell {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 3px;
   font-size: 11px;
-  color: #999;
+  color: var(--text-faint);
   position: relative;
 }
-.cell.idle { background: #fff; }
-.cell.queued { background: #fffbe6; color: var(--warning); }
-.cell.uploading { background: #e6f7ff; color: var(--primary); }
-.cell.done { background: #f6ffed; color: var(--success); }
-.cell.failed { background: #fff1f0; color: var(--danger); }
-.cell .status-icon { font-size: 18px; }
+
+.cell.idle   { background: #fff; }
+.cell.queued { background: #fffbeb; color: var(--warning); }
+.cell.uploading { background: #f0f9ff; color: #0369a1; }
+.cell.done   { background: #f0fdf4; color: var(--success); }
+.cell.failed { background: #fef2f2; color: var(--danger); }
+
+.cell .status-icon { font-size: 16px; }
+
 .cell .retry-btn {
   background: var(--danger);
   color: #fff;
   border: none;
   border-radius: 3px;
-  padding: 2px 6px;
+  padding: 2px 8px;
   cursor: pointer;
   font-size: 10px;
+  font-family: inherit;
   margin-top: 2px;
 }
+
+.cell .retry-btn:hover { opacity: .85; }
+
 .cell .clear-cell-btn {
   position: absolute;
-  top: 2px;
-  right: 2px;
-  background: rgba(0,0,0,0.3);
+  top: 3px;
+  right: 3px;
+  background: rgba(0,0,0,0.25);
   color: #fff;
   border: none;
   border-radius: 50%;
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
   cursor: pointer;
-  font-size: 11px;
+  font-size: 10px;
+  line-height: 15px;
+  text-align: center;
   display: none;
+  padding: 0;
 }
+
 .cell:hover .clear-cell-btn { display: block; }
+
 .cell .progress-mini {
-  width: 80%;
-  height: 3px;
-  background: #eee;
-  border-radius: 2px;
+  width: 72%;
+  height: 2px;
+  background: var(--border-light);
+  border-radius: 99px;
   overflow: hidden;
 }
+
 .cell .progress-mini > div {
   height: 100%;
-  background: var(--primary);
+  background: #0369a1;
   width: 0;
   transition: width .3s;
 }
 
-/* 底部操作区 */
+/* ── 底部操作栏 ── */
 .bottom-bar {
+  position: sticky;
+  bottom: 0;
   background: #fff;
-  padding: 14px 20px;
-  border-radius: 8px;
-  margin-top: 12px;
+  border-top: 1px solid var(--border);
+  padding: 12px 28px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 10px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  gap: 12px;
   flex-wrap: wrap;
 }
+
 .publish-btn {
-  padding: 10px 28px;
-  background: var(--success);
+  padding: 9px 24px;
+  background: var(--text);
   color: #fff;
   border: none;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 600;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
+  font-family: inherit;
+  transition: background .15s;
 }
-.publish-btn:hover:not(:disabled) { background: #389e0d; }
+
+.publish-btn:hover:not(:disabled) { background: var(--primary-hover); }
+
 .publish-btn:disabled {
-  background: #d9d9d9;
+  background: var(--border);
+  color: var(--text-faint);
   cursor: not-allowed;
 }
-.status-msg { font-size: 12px; color: #888; }
-.status-msg.error { color: var(--danger); }
+
+.status-msg { font-size: 12px; color: var(--text-muted); }
+.status-msg.error   { color: var(--danger); }
 .status-msg.success { color: var(--success); }
 
-/* 发布结果 */
+/* ── 发布结果 ── */
 .result {
-  background: #fff;
-  padding: 14px 20px;
-  border-radius: 8px;
-  margin-top: 12px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  margin: 20px 28px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 20px;
   display: none;
 }
-.result.show { display: block; }
-.result h3 { color: var(--success); }
-.result-item {
-  padding: 6px 0;
-  border-bottom: 1px solid #f5f5f5;
-  font-size: 12px;
-}
-.result-item.failed { color: var(--danger); }
-.result-item.ok { color: var(--success); }
 
-/* 响应式 */
+.result.show { display: block; }
+
+.result h3 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--success);
+  margin-bottom: 10px;
+}
+
+.result-item {
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border-light);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.result-item:last-child { border-bottom: none; }
+.result-item.failed { color: var(--danger); }
+.result-item.ok     { color: var(--success); }
+
+/* ── 响应式 ── */
 @media (max-width: 700px) {
-  body { padding: 8px; }
-  :root { --acc-col-width: 140px; --left-col-width: 140px; }
+  .page-body { padding: 16px; }
+  .top-bar, .bottom-bar { padding: 0 16px; }
+  .result { margin: 12px 16px; }
+  :root { --acc-col-width: 140px; --left-col-width: 130px; }
 }
 </style>
 </head>
@@ -358,10 +576,28 @@ h3 { font-size: 14px; margin-bottom: 8px; color: #666; }
     <h1>批量上传素材</h1>
     <div class="info" id="taskInfo">加载中...</div>
   </div>
-  <div>
-    <div style="font-size:11px;color:#888;margin-bottom:4px;" id="progressLabel">总进度 0 / 0</div>
+  <div style="text-align:right">
+    <div id="progressLabel">总进度 0 / 0</div>
     <div class="progress-wrap"><div class="progress-bar" id="totalProgress"></div></div>
   </div>
+</div>
+
+<div class="page-body">
+
+<div class="global-bar">
+  <span class="field">
+    <label>系列基础名</label>
+    <input type="text" class="base-name" id="baseNameInput"
+           placeholder="bet7-778-DT-0416" oninput="onGlobalChange('base_name')">
+  </span>
+  <span class="field">
+    <label>每账户广告数</label>
+    <input type="number" id="countInput" min="1" max="50" value="10"
+           oninput="onGlobalChange('count')">
+  </span>
+  <span class="field" style="margin-left:auto;">
+    <button class="btn-ghost" onclick="syncToAll()" title="把第一个账户的设置同步到所有账户">↓ 同步到全部</button>
+  </span>
 </div>
 
 <div class="drop-zone-top" id="dropZoneTop"
@@ -369,38 +605,34 @@ h3 { font-size: 14px; margin-bottom: 8px; color: #666; }
      ondragleave="onDragLeaveTop(event)"
      ondrop="onDropTop(event)"
      onclick="openFilePickerTop()">
-  <div class="icon">📦</div>
-  <div>拖文件夹或多个文件到此处 → 自动按文件名排序分配到所有账户</div>
-  <div style="font-size:11px;color:#bbb;margin-top:4px;">或点击选择多个文件</div>
+  <div class="icon">↑</div>
+  <div>拖文件夹或多个文件到此处，自动按文件名顺序分配到所有账户</div>
+  <div class="sub">或点击选择多个文件</div>
   <input type="file" id="topFileInput" multiple accept="video/*,image/*"
          style="display:none" onchange="onFilesPickedTop(event)">
 </div>
 
 <div class="section" id="configSection">
-  <div class="section-header" onclick="toggleSection('configSection')">
-    <span>▼ 账户配置（点击折叠）</span>
-  </div>
+  <div class="section-header" onclick="toggleSection('configSection')">账户配置</div>
   <div class="section-body">
-    <div class="config-grid" id="configGrid"></div>
+    <div class="config-stack" id="configStack"></div>
   </div>
 </div>
 
 <div class="section">
-  <div class="section-header">
-    <span>▼ 素材上传表格</span>
-  </div>
-  <div class="section-body">
+  <div class="section-header">素材上传</div>
+  <div class="section-body" style="padding: 0;">
     <div class="upload-grid-wrap">
       <div class="upload-grid" id="uploadGrid"></div>
     </div>
   </div>
 </div>
 
+</div><!-- /.page-body -->
+
 <div class="bottom-bar">
-  <div>
-    <span class="status-msg" id="statusMsg"></span>
-  </div>
-  <button class="publish-btn" id="publishBtn" onclick="publish()" disabled>一键发布</button>
+  <span class="status-msg" id="statusMsg"></span>
+  <button class="publish-btn" id="publishBtn" onclick="publish()" disabled>一键创建 + 发布</button>
 </div>
 
 <div class="result" id="resultBox">
@@ -422,10 +654,32 @@ const state = {
   files: {},               // {slotIdx: File}
   previewURLs: {},         // {slotIdx: blob URL}
   cells: {},               // {"slotIdx/accountId": {status, error}}
-  accountText: {},         // {accountId: {title, text, edited_title, edited_text}}
+  accountFields: {},       // {accountId: {event, url, country, device, gender, age_min, age_max, budget, title, text, edited: Set}}
+  baseName: '',
+  count: 10,
   totalCells: 0,
   doneCells: 0,
+  saveConfigTimer: null,
 };
+
+// 全局常量
+const EVENTS = [
+  { value: 'SUBSCRIBE', label: '订阅' },
+  { value: 'PURCHASE', label: 'PWA' },
+];
+const COUNTRIES = ['BR','US','IN','PH','MX','ID','VN','TH','CO','AR','PE','CL'];
+const DEVICES = ['Android', 'iOS', 'All'];
+const GENDERS = [
+  { value: 0, label: '全部' },
+  { value: 1, label: '男' },
+  { value: 2, label: '女' },
+];
+
+// 每账户字段列表（决定 sync 范围）
+const PER_ACCOUNT_FIELDS = [
+  'event', 'landing_url', 'country', 'device', 'gender',
+  'age_min', 'age_max', 'budget', 'title', 'text',
+];
 
 // ══════════════════════════════════════════════════════════════════
 // 工具
@@ -506,20 +760,38 @@ async function loadTask() {
   }
 
   const m = taskInfo.targets.length;
-  const n = taskInfo.count;
+  const n = taskInfo.count || 10;
+  state.count = n;
+  state.baseName = taskInfo.base_name || '';
   state.totalCells = m * n;
   document.documentElement.style.setProperty('--acc-count', m);
   document.getElementById('taskInfo').textContent =
     `${m} 个账户 · 每账户 ${n} 条广告 · 共 ${m * n} 个上传格`;
+  document.getElementById('baseNameInput').value = state.baseName;
+  document.getElementById('countInput').value = state.count;
 
-  // 初始化 accountText
+  // 初始化每账户的字段（从后端拿到的或者默认值）
   for (const t of taskInfo.targets) {
-    state.accountText[t.account_id] = {
-      title: t.title || '',
-      text: t.text || '',
-      edited_title: !!(t.title),
-      edited_text: !!(t.text),
+    state.accountFields[t.account_id] = {
+      event:        t.event || 'SUBSCRIBE',
+      landing_url:  t.landing_url || '',
+      country:      t.country || 'BR',
+      device:       t.device || 'Android',
+      gender:       typeof t.gender === 'number' ? t.gender : 0,
+      age_min:      t.age_min || 18,
+      age_max:      t.age_max || 45,
+      budget:       t.budget || 20,
+      title:        t.title || '',
+      text:         t.text || '',
+      // 哪些字段已被用户手动编辑过（不被 sync 覆盖）
+      edited:       new Set(),
     };
+    // 后端已有值的字段标记为 edited，避免首次 sync 覆盖
+    for (const f of PER_ACCOUNT_FIELDS) {
+      if (t[f] !== undefined && t[f] !== '' && t[f] !== null) {
+        state.accountFields[t.account_id].edited.add(f);
+      }
+    }
   }
 
   // 用后端已有的 slot 状态初始化（任务被重新打开时）
@@ -537,105 +809,245 @@ async function loadTask() {
     }
   }
 
-  renderConfigGrid();
+  renderConfigStack();
   renderUploadGrid();
   updateProgress();
   updatePublishBtn();
 }
 
 // ══════════════════════════════════════════════════════════════════
-// 账户配置区
+// 账户配置区 — 每账户一张全宽卡片
 // ══════════════════════════════════════════════════════════════════
-function renderConfigGrid() {
-  const grid = document.getElementById('configGrid');
-  grid.innerHTML = '';
+function renderConfigStack() {
+  const stack = document.getElementById('configStack');
+  stack.innerHTML = '';
+
   for (const t of taskInfo.targets) {
+    const aid = t.account_id;
+    const f = state.accountFields[aid];
+
     const card = document.createElement('div');
     card.className = 'config-card';
-    card.id = 'config_' + t.account_id;
-    const urlShort = (t.landing_url || '').length > 40
-      ? t.landing_url.slice(0, 38) + '...'
-      : (t.landing_url || '');
+    card.id = 'config_' + aid;
+
+    const eventOptions = EVENTS.map(e =>
+      `<option value="${e.value}" ${f.event === e.value ? 'selected' : ''}>${e.label}</option>`
+    ).join('');
+    const countryOptions = COUNTRIES.map(c =>
+      `<option value="${c}" ${f.country === c ? 'selected' : ''}>${c}</option>`
+    ).join('');
+    const deviceOptions = DEVICES.map(d =>
+      `<option value="${d}" ${f.device === d ? 'selected' : ''}>${d}</option>`
+    ).join('');
+    const genderOptions = GENDERS.map(g =>
+      `<option value="${g.value}" ${f.gender === g.value ? 'selected' : ''}>${g.label}</option>`
+    ).join('');
+
     card.innerHTML = `
-      <h4>${esc(t.account_name || t.account_id)}</h4>
-      <div class="meta">
-        🎯 ${esc(t.event || '')}<br>
-        🔗 ${esc(urlShort)}<br>
-        📄 ${esc(t.page_id || '未设置')}
+      <div class="card-head">
+        <h4>${esc(t.account_name || aid)}</h4>
+        <span class="alias">${esc(t.account_alias || '')}</span>
+        <span class="id">📄 ${esc(t.page_id || '-')} · 📊 ${esc(t.pixel_id || '-')}</span>
       </div>
-      <label>广告标题</label>
-      <input type="text" placeholder="输入标题..."
-             id="title_${t.account_id}"
-             value="${esc(state.accountText[t.account_id].title)}"
-             oninput="onTextInput('${t.account_id}', 'title')">
-      <label>广告文案</label>
-      <textarea placeholder="输入广告正文..."
-                id="text_${t.account_id}"
-                oninput="onTextInput('${t.account_id}', 'text')">${esc(state.accountText[t.account_id].text)}</textarea>
-      <div class="synced-hint" id="syncHint_${t.account_id}" style="display:none">
-        🔄 跟随同 URL 列自动同步
+
+      <div class="card-row">
+        <div class="field">
+          <label>转化事件</label>
+          <select id="event_${aid}" onchange="onFieldChange('${aid}','event')">${eventOptions}</select>
+        </div>
+        <div class="field" style="grid-column: span 2;">
+          <label>落地页 URL</label>
+          <input type="text" id="landing_url_${aid}" value="${esc(f.landing_url)}"
+                 placeholder="https://..." oninput="onFieldChange('${aid}','landing_url')">
+        </div>
+        <div class="field">
+          <label>国家</label>
+          <select id="country_${aid}" onchange="onFieldChange('${aid}','country')">${countryOptions}</select>
+        </div>
+      </div>
+
+      <div class="card-row">
+        <div class="field">
+          <label>设备</label>
+          <select id="device_${aid}" onchange="onFieldChange('${aid}','device')">${deviceOptions}</select>
+        </div>
+        <div class="field">
+          <label>性别</label>
+          <select id="gender_${aid}" onchange="onFieldChange('${aid}','gender')">${genderOptions}</select>
+        </div>
+        <div class="field">
+          <label>年龄范围</label>
+          <div class="age-range">
+            <input type="number" id="age_min_${aid}" min="13" max="65" value="${f.age_min}"
+                   oninput="onFieldChange('${aid}','age_min')">
+            <span>-</span>
+            <input type="number" id="age_max_${aid}" min="13" max="65" value="${f.age_max}"
+                   oninput="onFieldChange('${aid}','age_max')">
+          </div>
+        </div>
+        <div class="field">
+          <label>单账户日预算 ($)</label>
+          <input type="number" id="budget_${aid}" min="1" step="1" value="${f.budget}"
+                 oninput="onFieldChange('${aid}','budget')">
+        </div>
+      </div>
+
+      <div class="card-row">
+        <div class="field" style="grid-column: span 2;">
+          <label>广告标题</label>
+          <input type="text" id="title_${aid}" value="${esc(f.title)}"
+                 placeholder="输入标题..." oninput="onFieldChange('${aid}','title')">
+        </div>
+        <div class="field" style="grid-column: span 2;">
+          <label>广告文案</label>
+          <textarea id="text_${aid}" placeholder="输入广告正文..."
+                    oninput="onFieldChange('${aid}','text')">${esc(f.text)}</textarea>
+        </div>
+      </div>
+
+      <div class="synced-hint" id="syncHint_${aid}" style="display:none">
+        🔄 跟随其他账户自动同步（手动修改某字段后该字段解除同步）
       </div>
     `;
-    grid.appendChild(card);
+    stack.appendChild(card);
   }
   updateSyncHints();
 }
 
-function onTextInput(accountId, field) {
-  const at = state.accountText[accountId];
+function onFieldChange(accountId, field) {
+  const f = state.accountFields[accountId];
   const el = document.getElementById(`${field}_${accountId}`);
-  at[field] = el.value;
-  at['edited_' + field] = true;
+  if (!el) return;
+  let v = el.value;
+  // 类型转换
+  if (['gender', 'age_min', 'age_max'].includes(field)) {
+    v = parseInt(v, 10) || 0;
+  } else if (field === 'budget') {
+    v = parseFloat(v) || 0;
+  }
+  f[field] = v;
+  f.edited.add(field);
 
-  // 同 URL 同步：其他同 URL 且未手动编辑过的列，跟着本列走
-  const src = taskInfo.targets.find(t => t.account_id === accountId);
-  if (!src) return;
+  // 同步到其他账户（仅同步 PER_ACCOUNT_FIELDS 中的字段，跳过已 edited 的目标）
   for (const t of taskInfo.targets) {
     if (t.account_id === accountId) continue;
-    if (t.landing_url !== src.landing_url) continue;
-    const dst = state.accountText[t.account_id];
-    if (dst['edited_' + field]) continue;
-    dst[field] = at[field];
+    const dst = state.accountFields[t.account_id];
+    if (dst.edited.has(field)) continue;
+    dst[field] = v;
     const dstEl = document.getElementById(`${field}_${t.account_id}`);
-    if (dstEl) dstEl.value = at[field];
+    if (dstEl) {
+      if (dstEl.tagName === 'SELECT') dstEl.value = v;
+      else dstEl.value = v;
+    }
   }
   updateSyncHints();
 
   // debounce 保存
-  clearTimeout(state.saveTextTimer);
-  state.saveTextTimer = setTimeout(saveTextToServer, 500);
+  scheduleSaveConfig();
+}
+
+function onGlobalChange(what) {
+  if (what === 'base_name') {
+    state.baseName = document.getElementById('baseNameInput').value || '';
+  } else if (what === 'count') {
+    const newCount = Math.max(1, Math.min(50, parseInt(document.getElementById('countInput').value, 10) || 10));
+    state.count = newCount;
+    // 重算 total cells + 重新渲染 upload grid
+    state.totalCells = taskInfo.targets.length * newCount;
+    // 对于新增的 slot 行初始化 cells
+    const oldN = taskInfo.count;
+    if (newCount > oldN) {
+      for (let i = oldN; i < newCount; i++) {
+        for (const t of taskInfo.targets) {
+          state.cells[cellKey(i, t.account_id)] = { status: 'idle' };
+        }
+      }
+    } else if (newCount < oldN) {
+      // 清掉多余行的本地状态（本地 File，后端清除走 /upload/config 触发）
+      for (let i = newCount; i < oldN; i++) {
+        if (state.previewURLs[i]) {
+          URL.revokeObjectURL(state.previewURLs[i]);
+          delete state.previewURLs[i];
+        }
+        delete state.files[i];
+        for (const t of taskInfo.targets) {
+          const key = cellKey(i, t.account_id);
+          if (state.cells[key]?.status === 'done') state.doneCells--;
+          delete state.cells[key];
+        }
+      }
+    }
+    taskInfo.count = newCount;
+    const m = taskInfo.targets.length;
+    document.getElementById('taskInfo').textContent =
+      `${m} 个账户 · 每账户 ${newCount} 条广告 · 共 ${m * newCount} 个上传格`;
+    renderUploadGrid();
+    updateProgress();
+    updatePublishBtn();
+  }
+  scheduleSaveConfig();
 }
 
 function updateSyncHints() {
   for (const t of taskInfo.targets) {
-    const at = state.accountText[t.account_id];
+    const f = state.accountFields[t.account_id];
     const hint = document.getElementById('syncHint_' + t.account_id);
     if (!hint) continue;
-    // 有同 URL 的其他账户，且当前账户未被手动编辑？
-    const hasSiblings = taskInfo.targets.some(
-      o => o.account_id !== t.account_id && o.landing_url === t.landing_url
-    );
-    const untouched = !at.edited_title && !at.edited_text;
-    hint.style.display = hasSiblings && untouched ? 'block' : 'none';
+    hint.style.display = f.edited.size < PER_ACCOUNT_FIELDS.length ? 'block' : 'none';
   }
 }
 
-async function saveTextToServer() {
+function syncToAll() {
+  // 把第一个账户的所有字段强制同步到其他所有账户（清除他们的 edited 标记）
+  if (taskInfo.targets.length < 2) return;
+  const src = taskInfo.targets[0];
+  const srcF = state.accountFields[src.account_id];
+  for (let i = 1; i < taskInfo.targets.length; i++) {
+    const t = taskInfo.targets[i];
+    const dst = state.accountFields[t.account_id];
+    for (const field of PER_ACCOUNT_FIELDS) {
+      dst[field] = srcF[field];
+    }
+    dst.edited = new Set();
+  }
+  renderConfigStack();
+  scheduleSaveConfig();
+}
+
+function scheduleSaveConfig() {
+  clearTimeout(state.saveConfigTimer);
+  state.saveConfigTimer = setTimeout(saveConfigToServer, 500);
+}
+
+async function saveConfigToServer() {
   const body = {
-    accounts: taskInfo.targets.map(t => ({
-      account_id: t.account_id,
-      title: state.accountText[t.account_id].title,
-      text: state.accountText[t.account_id].text,
-    })),
+    count: state.count,
+    base_name: state.baseName,
+    accounts: taskInfo.targets.map(t => {
+      const f = state.accountFields[t.account_id];
+      return {
+        account_id: t.account_id,
+        event: f.event,
+        landing_url: f.landing_url,
+        country: f.country,
+        device: f.device,
+        gender: f.gender,
+        age_min: f.age_min,
+        age_max: f.age_max,
+        budget: f.budget,
+        title: f.title,
+        text: f.text,
+      };
+    }),
   };
   try {
-    await fetch('/upload/text?task=' + taskId, {
+    await fetch('/upload/config?task=' + taskId, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
   } catch (e) {
-    console.warn('save text failed', e);
+    console.warn('save config failed', e);
   }
 }
 

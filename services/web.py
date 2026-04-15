@@ -206,19 +206,32 @@ def create_multi_upload_task(
     chat_id: int,
     token: str,
     targets: list[dict],
-    count: int,
+    count: int = 10,
+    base_name: str = "",
 ) -> str:
-    """创建 v2 多账户上传任务
+    """创建 v2 多账户上传任务（延迟绑定，配置在网页填）
 
-    targets 每项必须包含: account_id, account_name, account_alias, page_id, pixel_id,
-                         campaign_id, adset_id, landing_url, cta, event
+    最少只需要: token + targets (账户元数据 + page_id + pixel_id)。
+    campaign_id / adset_id / event / url / 定向参数 等在网页配置后再创建。
     """
     task_id = secrets.token_urlsafe(16)
+
     # 补全 target 默认字段
     for t in targets:
+        t.setdefault("campaign_id", "")
+        t.setdefault("adset_id", "")
+        t.setdefault("landing_url", "")
+        t.setdefault("event", "SUBSCRIBE")
+        t.setdefault("cta", "SUBSCRIBE")
+        t.setdefault("country", "BR")
+        t.setdefault("device", "Android")
+        t.setdefault("gender", 0)
+        t.setdefault("age_min", 18)
+        t.setdefault("age_max", 45)
+        t.setdefault("budget", 20.0)
         t.setdefault("title", "")
         t.setdefault("text", "")
-        t.setdefault("status", "ready")
+        t.setdefault("status", "pending")
         t.setdefault("error", "")
         t.setdefault("ad_ids", [])
 
@@ -227,6 +240,7 @@ def create_multi_upload_task(
         "chat_id": chat_id,
         "token": token,
         "count": count,
+        "base_name": base_name,
         "targets": targets,
         "slots": [_empty_slot_row(account_ids) for _ in range(count)],
         "published": False,
@@ -331,6 +345,7 @@ async def handle_upload_info(request: web.Request) -> web.Response:
     return web.json_response({
         "version": 2,
         "count": task["count"],
+        "base_name": task.get("base_name", ""),
         "targets": [
             {
                 "account_id":    t["account_id"],
@@ -341,6 +356,12 @@ async def handle_upload_info(request: web.Request) -> web.Response:
                 "landing_url":   t.get("landing_url", ""),
                 "event":         t.get("event", ""),
                 "cta":           t.get("cta", ""),
+                "country":       t.get("country", ""),
+                "device":        t.get("device", ""),
+                "gender":        t.get("gender", 0),
+                "age_min":       t.get("age_min", 18),
+                "age_max":       t.get("age_max", 45),
+                "budget":        t.get("budget", 20.0),
                 "title":         t.get("title", ""),
                 "text":          t.get("text", ""),
                 "campaign_id":   t.get("campaign_id", ""),
@@ -363,6 +384,89 @@ async def handle_upload_info(request: web.Request) -> web.Response:
         "published": task["published"],
         "results": task.get("results", []),
     })
+
+
+async def handle_upload_config(request: web.Request) -> web.Response:
+    """POST /upload/config?task=xxx — 保存投手在网页上填的投放配置
+
+    body 结构: {
+      "count": 10,
+      "base_name": "bet7-...",
+      "accounts": [
+        {
+          "account_id": "...",
+          "event": "SUBSCRIBE",
+          "landing_url": "https://...",
+          "country": "BR",
+          "device": "Android",
+          "gender": 0,
+          "age_min": 18, "age_max": 45,
+          "budget": 20.0,
+          "title": "...",
+          "text": "..."
+        }
+      ]
+    }
+    """
+    task_id = request.query.get("task", "")
+    task = upload_tasks.get(task_id)
+    if not task or task.get("legacy"):
+        return web.json_response({"error": "Invalid task"}, status=403)
+    if task.get("published"):
+        return web.json_response({"error": "Already published"}, status=400)
+
+    body = await request.json()
+
+    # 全局字段
+    if "count" in body:
+        try:
+            new_count = int(body["count"])
+            if not (1 <= new_count <= 50):
+                raise ValueError
+        except (ValueError, TypeError):
+            return web.json_response({"error": "count must be 1-50"}, status=400)
+        if new_count != task["count"]:
+            # 调整 slots 尺寸
+            old_count = task["count"]
+            account_ids = [t["account_id"] for t in task["targets"]]
+            if new_count > old_count:
+                task["slots"].extend(
+                    _empty_slot_row(account_ids) for _ in range(new_count - old_count)
+                )
+            else:
+                # 释放被截掉的 slot 对应的临时文件
+                for row in task["slots"][new_count:]:
+                    for cell in row.values():
+                        p = cell.get("media_path")
+                        if p:
+                            Path(p).unlink(missing_ok=True)
+                task["slots"] = task["slots"][:new_count]
+            task["count"] = new_count
+
+    if "base_name" in body:
+        task["base_name"] = str(body["base_name"] or "").strip()
+
+    # 每账户字段
+    by_id = {t["account_id"]: t for t in task["targets"]}
+    accounts_data = body.get("accounts", []) or []
+    allowed_fields = {
+        "event", "landing_url", "country", "device", "gender",
+        "age_min", "age_max", "budget", "title", "text",
+    }
+    cta_map = {"SUBSCRIBE": "SUBSCRIBE", "PURCHASE": "SHOP_NOW"}
+    for item in accounts_data:
+        aid = item.get("account_id", "")
+        t = by_id.get(aid)
+        if not t:
+            continue
+        for f in allowed_fields:
+            if f in item:
+                t[f] = item[f]
+        # 同步 cta
+        ev = t.get("event", "SUBSCRIBE")
+        t["cta"] = cta_map.get(ev, "SUBSCRIBE")
+
+    return web.json_response({"ok": True})
 
 
 def _build_fb_for_target(token: str, target: dict):
@@ -612,10 +716,12 @@ async def handle_upload_publish(request: web.Request) -> web.Response:
     if task.get("legacy"):
         return await _handle_upload_publish_legacy(task)
 
-    # v2 多账户 fanout
-    from services.campaign import publish_targets_parallel
+    # v2 多账户 fanout —— 先创建 campaign/adset，再 fanout 发布
+    from services.campaign import (
+        TargetSpec, create_targets_parallel, publish_targets_parallel
+    )
 
-    # 为每个账户收集它的 slot 列表（按 row 顺序）
+    # 为每个账户收集它的 slot 列表（按 row 顺序，仅 done 状态）
     slots_by_account: dict[str, list[dict]] = {}
     for t in task["targets"]:
         aid = t["account_id"]
@@ -639,19 +745,82 @@ async def handle_upload_publish(request: web.Request) -> web.Response:
         return web.json_response(
             {"error": "No account has any uploaded media"}, status=400)
 
-    # 每账户的 token 注入到 target dict（publish_target 需要）
+    # 校验每账户的配置是否齐全
+    missing = []
     for t in active_targets:
-        t["token"] = task["token"]
+        if not t.get("landing_url"):
+            missing.append(f"{t.get('account_name', t['account_id'])}: 缺 URL")
+        if not t.get("country"):
+            missing.append(f"{t.get('account_name', t['account_id'])}: 缺国家")
+    if missing:
+        return web.json_response(
+            {"error": "配置未填齐: " + "; ".join(missing)}, status=400)
 
-    text_by_account = {t["account_id"]: t.get("text", "") for t in active_targets}
-    title_by_account = {t["account_id"]: t.get("title", "") for t in active_targets}
+    base_name = task.get("base_name", "") or "campaign"
+    token = task["token"]
+
+    # 第一步：对还没有 campaign_id 的账户并发创建 campaign + adset
+    specs_to_create = []
+    specs_index: list[int] = []  # 与 active_targets 对应位置
+    for i, t in enumerate(active_targets):
+        if t.get("campaign_id") and t.get("adset_id"):
+            continue  # 已经创建过（重试发布场景）
+        alias = t.get("account_alias") or t["account_id"][-6:]
+        specs_to_create.append(TargetSpec(
+            account_id=t["account_id"],
+            account_name=t.get("account_name", ""),
+            token=token,
+            page_id=t.get("page_id", ""),
+            pixel_id=t.get("pixel_id", ""),
+            campaign_name=f"{base_name}-{alias}",
+            daily_budget_usd=float(t.get("budget", 20.0)),
+            country=t.get("country", "BR"),
+            device_os=t.get("device", "Android"),
+            age_min=int(t.get("age_min", 18)),
+            age_max=int(t.get("age_max", 45)),
+            gender=int(t.get("gender", 0)),
+            conversion_event=t.get("event", "SUBSCRIBE"),
+            landing_url=t.get("landing_url", ""),
+            cta=t.get("cta", "SUBSCRIBE"),
+            count=task["count"],
+        ))
+        specs_index.append(i)
+
+    if specs_to_create:
+        created = await create_targets_parallel(specs_to_create)
+        for spec, i in zip(created, specs_index):
+            t = active_targets[i]
+            t["campaign_id"] = spec.campaign_id
+            t["adset_id"] = spec.adset_id
+            if spec.error:
+                t["error"] = spec.error
+
+    # 只对成功创建了 campaign+adset 的账户继续发布
+    ready_targets = [t for t in active_targets if t.get("campaign_id") and t.get("adset_id")]
+    failed_create = [t for t in active_targets if not (t.get("campaign_id") and t.get("adset_id"))]
+
+    # 每账户的 token 注入到 target dict（publish_target 需要）
+    for t in ready_targets:
+        t["token"] = token
+
+    text_by_account = {t["account_id"]: t.get("text", "") for t in ready_targets}
+    title_by_account = {t["account_id"]: t.get("title", "") for t in ready_targets}
 
     results = await publish_targets_parallel(
-        targets=active_targets,
-        slots_by_account=slots_by_account,
+        targets=ready_targets,
+        slots_by_account={aid: slots_by_account[aid] for aid in (t["account_id"] for t in ready_targets)},
         text_by_account=text_by_account,
         title_by_account=title_by_account,
     )
+
+    # 合并创建失败的账户到结果
+    for t in failed_create:
+        results.append({
+            "account_id": t["account_id"],
+            "ok": False,
+            "ad_ids": [],
+            "error": "创建 campaign/adset 失败: " + (t.get("error") or "unknown"),
+        })
 
     # 回写每个 target 的状态和 ad_ids
     for r in results:
@@ -766,6 +935,7 @@ def create_web_app() -> web.Application:
     app.router.add_post("/upload/file", handle_upload_file)
     app.router.add_post("/upload/clear", handle_upload_clear)
     app.router.add_post("/upload/text", handle_upload_text)
+    app.router.add_post("/upload/config", handle_upload_config)
     app.router.add_post("/upload/publish", handle_upload_publish)
     return app
 
