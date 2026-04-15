@@ -11,3 +11,6 @@ wheels/
 
 # 环境变量
 .env
+
+# 资源池运行时数据（/go 流程 per-chat 元数据）
+store/pool.json

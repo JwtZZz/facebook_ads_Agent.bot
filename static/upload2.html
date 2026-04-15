@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>批量上传素材 · 多账户</title>
+<style>
+:root {
+  --acc-col-width: 180px;
+  --left-col-width: 200px;
+  --primary: #1890ff;
+  --success: #52c41a;
+  --warning: #faad14;
+  --danger: #ff4d4f;
+  --border: #e8e8e8;
+  --bg: #f5f5f5;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: #333;
+  font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+  padding: 16px;
+  font-size: 13px;
+}
+h1 { font-size: 18px; }
+h3 { font-size: 14px; margin-bottom: 8px; color: #666; }
+
+/* 顶部栏 */
+.top-bar {
+  background: #fff;
+  padding: 14px 20px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.top-bar .info { color: #888; font-size: 12px; }
+.progress-wrap {
+  background: #eee;
+  border-radius: 4px;
+  height: 8px;
+  width: 200px;
+  overflow: hidden;
+}
+.progress-bar {
+  background: var(--primary);
+  height: 100%;
+  width: 0;
+  transition: width .3s;
+}
+
+/* 拖拽区 */
+.drop-zone-top {
+  background: #fff;
+  border: 2px dashed #d9d9d9;
+  border-radius: 8px;
+  padding: 24px;
+  text-align: center;
+  cursor: pointer;
+  margin-bottom: 12px;
+  transition: all .2s;
+  color: #888;
+}
+.drop-zone-top:hover,
+.drop-zone-top.dragover {
+  border-color: var(--primary);
+  background: #e6f7ff;
+  color: var(--primary);
+}
+.drop-zone-top .icon { font-size: 28px; margin-bottom: 4px; }
+
+/* 折叠段 */
+.section {
+  background: #fff;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+.section-header {
+  padding: 12px 16px;
+  cursor: pointer;
+  font-weight: 600;
+  color: #333;
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+}
+.section-body {
+  padding: 12px 16px;
+  overflow-x: auto;
+}
+.section.collapsed .section-body { display: none; }
+.section.collapsed .section-header { border-bottom: none; }
+
+/* 账户配置区 — 每列一个账户 */
+.config-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--acc-count, 1), minmax(var(--acc-col-width), 1fr));
+  gap: 12px;
+  min-width: min-content;
+}
+.config-card {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px;
+  background: #fafafa;
+}
+.config-card h4 {
+  font-size: 13px;
+  color: var(--primary);
+  margin-bottom: 6px;
+}
+.config-card .meta {
+  font-size: 11px;
+  color: #999;
+  line-height: 1.5;
+  margin-bottom: 6px;
+  word-break: break-all;
+}
+.config-card label {
+  font-size: 11px;
+  color: #666;
+  display: block;
+  margin-top: 4px;
+}
+.config-card textarea,
+.config-card input {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: inherit;
+}
+.config-card textarea {
+  min-height: 48px;
+  resize: vertical;
+}
+.config-card.synced textarea,
+.config-card.synced input {
+  background: #fafafa;
+  color: #888;
+}
+.synced-hint {
+  font-size: 10px;
+  color: var(--warning);
+  margin-top: 2px;
+}
+
+/* 上传表格 */
+.upload-grid-wrap {
+  overflow-x: auto;
+}
+.upload-grid {
+  display: grid;
+  grid-template-columns: var(--left-col-width) repeat(var(--acc-count, 1), minmax(var(--acc-col-width), 1fr));
+  min-width: min-content;
+}
+.upload-grid > div {
+  border: 1px solid var(--border);
+  border-left: none;
+  border-top: none;
+  padding: 8px;
+  min-height: 70px;
+}
+.upload-grid > .col-head,
+.upload-grid > .row-head {
+  background: #fafafa;
+  font-weight: 600;
+  font-size: 12px;
+}
+.upload-grid > .row-head {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  border-left: 1px solid var(--border);
+}
+.upload-grid > .col-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.upload-grid > .corner {
+  position: sticky;
+  top: 0;
+  left: 0;
+  z-index: 3;
+  background: #eee;
+  border-left: 1px solid var(--border);
+  border-top: 1px solid var(--border);
+}
+
+.row-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  position: relative;
+}
+.row-head .preview {
+  max-width: 140px;
+  max-height: 80px;
+  object-fit: contain;
+  background: #000;
+  border-radius: 4px;
+  pointer-events: none;
+}
+.row-head .filename {
+  font-size: 10px;
+  color: #666;
+  word-break: break-all;
+  text-align: center;
+  line-height: 1.2;
+  max-width: 100%;
+}
+.row-head .clear-row-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: rgba(0,0,0,0.4);
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  font-size: 13px;
+  display: none;
+}
+.row-head:hover .clear-row-btn { display: block; }
+.row-head.empty {
+  color: #ccc;
+  font-size: 11px;
+}
+
+.cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #999;
+  position: relative;
+}
+.cell.idle { background: #fff; }
+.cell.queued { background: #fffbe6; color: var(--warning); }
+.cell.uploading { background: #e6f7ff; color: var(--primary); }
+.cell.done { background: #f6ffed; color: var(--success); }
+.cell.failed { background: #fff1f0; color: var(--danger); }
+.cell .status-icon { font-size: 18px; }
+.cell .retry-btn {
+  background: var(--danger);
+  color: #fff;
+  border: none;
+  border-radius: 3px;
+  padding: 2px 6px;
+  cursor: pointer;
+  font-size: 10px;
+  margin-top: 2px;
+}
+.cell .clear-cell-btn {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  background: rgba(0,0,0,0.3);
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  font-size: 11px;
+  display: none;
+}
+.cell:hover .clear-cell-btn { display: block; }
+.cell .progress-mini {
+  width: 80%;
+  height: 3px;
+  background: #eee;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.cell .progress-mini > div {
+  height: 100%;
+  background: var(--primary);
+  width: 0;
+  transition: width .3s;
+}
+
+/* 底部操作区 */
+.bottom-bar {
+  background: #fff;
+  padding: 14px 20px;
+  border-radius: 8px;
+  margin-top: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  flex-wrap: wrap;
+}
+.publish-btn {
+  padding: 10px 28px;
+  background: var(--success);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.publish-btn:hover:not(:disabled) { background: #389e0d; }
+.publish-btn:disabled {
+  background: #d9d9d9;
+  cursor: not-allowed;
+}
+.status-msg { font-size: 12px; color: #888; }
+.status-msg.error { color: var(--danger); }
+.status-msg.success { color: var(--success); }
+
+/* 发布结果 */
+.result {
+  background: #fff;
+  padding: 14px 20px;
+  border-radius: 8px;
+  margin-top: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  display: none;
+}
+.result.show { display: block; }
+.result h3 { color: var(--success); }
+.result-item {
+  padding: 6px 0;
+  border-bottom: 1px solid #f5f5f5;
+  font-size: 12px;
+}
+.result-item.failed { color: var(--danger); }
+.result-item.ok { color: var(--success); }
+
+/* 响应式 */
+@media (max-width: 700px) {
+  body { padding: 8px; }
+  :root { --acc-col-width: 140px; --left-col-width: 140px; }
+}
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <div>
+    <h1>批量上传素材</h1>
+    <div class="info" id="taskInfo">加载中...</div>
+  </div>
+  <div>
+    <div style="font-size:11px;color:#888;margin-bottom:4px;" id="progressLabel">总进度 0 / 0</div>
+    <div class="progress-wrap"><div class="progress-bar" id="totalProgress"></div></div>
+  </div>
+</div>
+
+<div class="drop-zone-top" id="dropZoneTop"
+     ondragover="onDragOverTop(event)"
+     ondragleave="onDragLeaveTop(event)"
+     ondrop="onDropTop(event)"
+     onclick="openFilePickerTop()">
+  <div class="icon">📦</div>
+  <div>拖文件夹或多个文件到此处 → 自动按文件名排序分配到所有账户</div>
+  <div style="font-size:11px;color:#bbb;margin-top:4px;">或点击选择多个文件</div>
+  <input type="file" id="topFileInput" multiple accept="video/*,image/*"
+         style="display:none" onchange="onFilesPickedTop(event)">
+</div>
+
+<div class="section" id="configSection">
+  <div class="section-header" onclick="toggleSection('configSection')">
+    <span>▼ 账户配置（点击折叠）</span>
+  </div>
+  <div class="section-body">
+    <div class="config-grid" id="configGrid"></div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-header">
+    <span>▼ 素材上传表格</span>
+  </div>
+  <div class="section-body">
+    <div class="upload-grid-wrap">
+      <div class="upload-grid" id="uploadGrid"></div>
+    </div>
+  </div>
+</div>
+
+<div class="bottom-bar">
+  <div>
+    <span class="status-msg" id="statusMsg"></span>
+  </div>
+  <button class="publish-btn" id="publishBtn" onclick="publish()" disabled>一键发布</button>
+</div>
+
+<div class="result" id="resultBox">
+  <h3>发布完成</h3>
+  <div id="resultList"></div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════════
+// 全局状态
+// ══════════════════════════════════════════════════════════════════
+const taskId = new URLSearchParams(location.search).get('task');
+if (!taskId) {
+  document.body.innerHTML = '<div style="text-align:center;padding:60px;color:#999;">链接无效</div>';
+}
+
+let taskInfo = null;       // 来自 /upload/info
+const state = {
+  files: {},               // {slotIdx: File}
+  previewURLs: {},         // {slotIdx: blob URL}
+  cells: {},               // {"slotIdx/accountId": {status, error}}
+  accountText: {},         // {accountId: {title, text, edited_title, edited_text}}
+  totalCells: 0,
+  doneCells: 0,
+};
+
+// ══════════════════════════════════════════════════════════════════
+// 工具
+// ══════════════════════════════════════════════════════════════════
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s || '';
+  return d.innerHTML;
+}
+
+function cellKey(slot, acc) { return `${slot}/${acc}`; }
+
+function isVideo(file) { return (file.type || '').startsWith('video/'); }
+
+function filterMedia(files) {
+  return files.filter(f => f.type.startsWith('video/') || f.type.startsWith('image/'));
+}
+function sortFiles(files) {
+  return files.slice().sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
+  );
+}
+
+function toggleSection(id) {
+  document.getElementById(id).classList.toggle('collapsed');
+}
+
+// ══════════════════════════════════════════════════════════════════
+// 并发上传池
+// ══════════════════════════════════════════════════════════════════
+class UploadPool {
+  constructor(max) {
+    this.max = max;
+    this.running = 0;
+    this.queue = [];
+  }
+  add(fn) {
+    return new Promise(resolve => {
+      this.queue.push({ fn, resolve });
+      this._next();
+    });
+  }
+  _next() {
+    while (this.running < this.max && this.queue.length) {
+      const { fn, resolve } = this.queue.shift();
+      this.running++;
+      fn().then(r => { resolve(r); }).catch(e => { resolve({ error: e }); }).finally(() => {
+        this.running--;
+        this._next();
+      });
+    }
+  }
+}
+const uploadPool = new UploadPool(6);
+
+// ══════════════════════════════════════════════════════════════════
+// 加载任务信息
+// ══════════════════════════════════════════════════════════════════
+async function loadTask() {
+  try {
+    const resp = await fetch('/upload/info?task=' + taskId);
+    if (!resp.ok) {
+      document.body.innerHTML =
+        '<div style="text-align:center;padding:60px;color:#999;">任务不存在或已过期</div>';
+      return;
+    }
+    taskInfo = await resp.json();
+  } catch (e) {
+    document.body.innerHTML =
+      '<div style="text-align:center;padding:60px;color:#f5222d;">加载失败: ' + esc(e.message) + '</div>';
+    return;
+  }
+
+  if (taskInfo.published) {
+    document.body.innerHTML =
+      '<div style="text-align:center;padding:60px;color:#52c41a;font-size:16px;">该任务已发布完成</div>';
+    return;
+  }
+
+  const m = taskInfo.targets.length;
+  const n = taskInfo.count;
+  state.totalCells = m * n;
+  document.documentElement.style.setProperty('--acc-count', m);
+  document.getElementById('taskInfo').textContent =
+    `${m} 个账户 · 每账户 ${n} 条广告 · 共 ${m * n} 个上传格`;
+
+  // 初始化 accountText
+  for (const t of taskInfo.targets) {
+    state.accountText[t.account_id] = {
+      title: t.title || '',
+      text: t.text || '',
+      edited_title: !!(t.title),
+      edited_text: !!(t.text),
+    };
+  }
+
+  // 用后端已有的 slot 状态初始化（任务被重新打开时）
+  state.doneCells = 0;
+  for (let i = 0; i < n; i++) {
+    const row = taskInfo.slots[i] || {};
+    for (const t of taskInfo.targets) {
+      const cell = row[t.account_id] || { status: 'idle' };
+      state.cells[cellKey(i, t.account_id)] = {
+        status: cell.status || 'idle',
+        filename: cell.filename || '',
+        error: cell.error || '',
+      };
+      if (cell.status === 'done') state.doneCells++;
+    }
+  }
+
+  renderConfigGrid();
+  renderUploadGrid();
+  updateProgress();
+  updatePublishBtn();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// 账户配置区
+// ══════════════════════════════════════════════════════════════════
+function renderConfigGrid() {
+  const grid = document.getElementById('configGrid');
+  grid.innerHTML = '';
+  for (const t of taskInfo.targets) {
+    const card = document.createElement('div');
+    card.className = 'config-card';
+    card.id = 'config_' + t.account_id;
+    const urlShort = (t.landing_url || '').length > 40
+      ? t.landing_url.slice(0, 38) + '...'
+      : (t.landing_url || '');
+    card.innerHTML = `
+      <h4>${esc(t.account_name || t.account_id)}</h4>
+      <div class="meta">
+        🎯 ${esc(t.event || '')}<br>
+        🔗 ${esc(urlShort)}<br>
+        📄 ${esc(t.page_id || '未设置')}
+      </div>
+      <label>广告标题</label>
+      <input type="text" placeholder="输入标题..."
+             id="title_${t.account_id}"
+             value="${esc(state.accountText[t.account_id].title)}"
+             oninput="onTextInput('${t.account_id}', 'title')">
+      <label>广告文案</label>
+      <textarea placeholder="输入广告正文..."
+                id="text_${t.account_id}"
+                oninput="onTextInput('${t.account_id}', 'text')">${esc(state.accountText[t.account_id].text)}</textarea>
+      <div class="synced-hint" id="syncHint_${t.account_id}" style="display:none">
+        🔄 跟随同 URL 列自动同步
+      </div>
+    `;
+    grid.appendChild(card);
+  }
+  updateSyncHints();
+}
+
+function onTextInput(accountId, field) {
+  const at = state.accountText[accountId];
+  const el = document.getElementById(`${field}_${accountId}`);
+  at[field] = el.value;
+  at['edited_' + field] = true;
+
+  // 同 URL 同步：其他同 URL 且未手动编辑过的列，跟着本列走
+  const src = taskInfo.targets.find(t => t.account_id === accountId);
+  if (!src) return;
+  for (const t of taskInfo.targets) {
+    if (t.account_id === accountId) continue;
+    if (t.landing_url !== src.landing_url) continue;
+    const dst = state.accountText[t.account_id];
+    if (dst['edited_' + field]) continue;
+    dst[field] = at[field];
+    const dstEl = document.getElementById(`${field}_${t.account_id}`);
+    if (dstEl) dstEl.value = at[field];
+  }
+  updateSyncHints();
+
+  // debounce 保存
+  clearTimeout(state.saveTextTimer);
+  state.saveTextTimer = setTimeout(saveTextToServer, 500);
+}
+
+function updateSyncHints() {
+  for (const t of taskInfo.targets) {
+    const at = state.accountText[t.account_id];
+    const hint = document.getElementById('syncHint_' + t.account_id);
+    if (!hint) continue;
+    // 有同 URL 的其他账户，且当前账户未被手动编辑？
+    const hasSiblings = taskInfo.targets.some(
+      o => o.account_id !== t.account_id && o.landing_url === t.landing_url
+    );
+    const untouched = !at.edited_title && !at.edited_text;
+    hint.style.display = hasSiblings && untouched ? 'block' : 'none';
+  }
+}
+
+async function saveTextToServer() {
+  const body = {
+    accounts: taskInfo.targets.map(t => ({
+      account_id: t.account_id,
+      title: state.accountText[t.account_id].title,
+      text: state.accountText[t.account_id].text,
+    })),
+  };
+  try {
+    await fetch('/upload/text?task=' + taskId, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch (e) {
+    console.warn('save text failed', e);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// 上传表格
+// ══════════════════════════════════════════════════════════════════
+function renderUploadGrid() {
+  const grid = document.getElementById('uploadGrid');
+  grid.innerHTML = '';
+
+  // 左上角空格
+  const corner = document.createElement('div');
+  corner.className = 'corner col-head';
+  corner.textContent = '素材 \\ 账户';
+  grid.appendChild(corner);
+
+  // 列头：账户
+  for (const t of taskInfo.targets) {
+    const h = document.createElement('div');
+    h.className = 'col-head';
+    h.innerHTML = `<div>${esc(t.account_name || t.account_id)}</div>
+                   <div style="font-size:10px;color:#999">${esc(t.account_alias || '')}</div>`;
+    grid.appendChild(h);
+  }
+
+  // 每行：素材
+  for (let i = 0; i < taskInfo.count; i++) {
+    // 行头
+    const rh = document.createElement('div');
+    rh.className = 'row-head';
+    rh.id = 'rowhead_' + i;
+    renderRowHead(i, rh);
+    grid.appendChild(rh);
+
+    // 每个账户的 cell
+    for (const t of taskInfo.targets) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.id = 'cell_' + cellKey(i, t.account_id);
+      renderCell(i, t.account_id, cell);
+      grid.appendChild(cell);
+    }
+  }
+}
+
+function renderRowHead(slotIdx, el) {
+  const file = state.files[slotIdx];
+  if (!file) {
+    el.classList.add('empty');
+    el.innerHTML = `<div>素材 ${slotIdx + 1}</div><div style="font-size:10px">（空）</div>`;
+    return;
+  }
+  el.classList.remove('empty');
+  const url = state.previewURLs[slotIdx] || '';
+  const previewTag = isVideo(file)
+    ? `<video class="preview" src="${url}#t=0.1" preload="metadata" muted playsinline></video>`
+    : `<img class="preview" src="${url}" alt="">`;
+  el.innerHTML = `
+    ${previewTag}
+    <div class="filename">${esc(file.name)}</div>
+    <button class="clear-row-btn" onclick="event.stopPropagation();clearRow(${slotIdx})" title="清除此素材">×</button>
+  `;
+}
+
+function renderCell(slotIdx, accountId, el) {
+  const key = cellKey(slotIdx, accountId);
+  const c = state.cells[key] || { status: 'idle' };
+  el.className = 'cell ' + c.status;
+
+  let inner = '';
+  if (c.status === 'idle') {
+    inner = '<div style="color:#ccc">—</div>';
+  } else if (c.status === 'queued') {
+    inner = '<div class="status-icon">⏳</div><div>排队中</div>';
+  } else if (c.status === 'uploading') {
+    inner = `<div class="status-icon">⬆</div><div>上传中</div>
+             <div class="progress-mini"><div style="width:${c.progress || 30}%"></div></div>`;
+  } else if (c.status === 'done') {
+    inner = `<div class="status-icon">✓</div><div>已完成</div>
+             <button class="clear-cell-btn" onclick="event.stopPropagation();clearCell(${slotIdx},'${accountId}')" title="取消">×</button>`;
+  } else if (c.status === 'failed') {
+    inner = `<div class="status-icon">✗</div><div>失败</div>
+             <button class="retry-btn" onclick="retryCell(${slotIdx},'${accountId}')">重试</button>`;
+  }
+  el.innerHTML = inner;
+}
+
+function setCellStatus(slotIdx, accountId, status, extra = {}) {
+  const key = cellKey(slotIdx, accountId);
+  const prev = state.cells[key] || {};
+  const wasDone = prev.status === 'done';
+  state.cells[key] = { ...prev, status, ...extra };
+  if (status === 'done' && !wasDone) state.doneCells++;
+  if (status !== 'done' && wasDone) state.doneCells--;
+  const el = document.getElementById('cell_' + key);
+  if (el) renderCell(slotIdx, accountId, el);
+  updateProgress();
+  updatePublishBtn();
+}
+
+function updateProgress() {
+  const el = document.getElementById('totalProgress');
+  const lbl = document.getElementById('progressLabel');
+  const pct = state.totalCells > 0 ? (state.doneCells / state.totalCells * 100) : 0;
+  if (el) el.style.width = pct + '%';
+  if (lbl) lbl.textContent = `总进度 ${state.doneCells} / ${state.totalCells}`;
+}
+
+function updatePublishBtn() {
+  const btn = document.getElementById('publishBtn');
+  // 至少每个账户有 1 个 done 才能发布
+  let canPublish = false;
+  if (taskInfo) {
+    canPublish = taskInfo.targets.every(t => {
+      for (let i = 0; i < taskInfo.count; i++) {
+        if (state.cells[cellKey(i, t.account_id)]?.status === 'done') return true;
+      }
+      return false;
+    });
+  }
+  btn.disabled = !canPublish;
+  btn.textContent = canPublish
+    ? `一键发布到 ${taskInfo.targets.length} 个账户`
+    : '至少每账户传 1 个素材才能发布';
+}
+
+// ══════════════════════════════════════════════════════════════════
+// 拖拽文件 / 选择文件
+// ══════════════════════════════════════════════════════════════════
+function onDragOverTop(e) {
+  e.preventDefault();
+  document.getElementById('dropZoneTop').classList.add('dragover');
+}
+function onDragLeaveTop(e) {
+  document.getElementById('dropZoneTop').classList.remove('dragover');
+}
+async function onDropTop(e) {
+  e.preventDefault();
+  document.getElementById('dropZoneTop').classList.remove('dragover');
+
+  let files = [];
+  const items = e.dataTransfer.items;
+  if (items && items.length && typeof items[0].webkitGetAsEntry === 'function') {
+    const entries = [];
+    for (let i = 0; i < items.length; i++) {
+      const entry = items[i].webkitGetAsEntry();
+      if (entry) entries.push(entry);
+    }
+    for (const entry of entries) await walkEntry(entry, files);
+  } else {
+    files = [...e.dataTransfer.files];
+  }
+  assignBatch(sortFiles(filterMedia(files)));
+}
+
+function openFilePickerTop() {
+  document.getElementById('topFileInput').click();
+}
+function onFilesPickedTop(e) {
+  assignBatch(sortFiles(filterMedia([...e.target.files])));
+  e.target.value = '';
+}
+
+function walkEntry(entry, files) {
+  return new Promise(resolve => {
+    if (entry.isFile) {
+      entry.file(f => { files.push(f); resolve(); }, () => resolve());
+    } else if (entry.isDirectory) {
+      const reader = entry.createReader();
+      const readAll = () => {
+        reader.readEntries(async batch => {
+          if (!batch.length) { resolve(); return; }
+          for (const child of batch) await walkEntry(child, files);
+          readAll();
+        }, () => resolve());
+      };
+      readAll();
+    } else {
+      resolve();
+    }
+  });
+}
+
+function assignBatch(files) {
+  if (!files.length) {
+    setStatus('未找到视频或图片文件', 'error');
+    return;
+  }
+  let assigned = 0;
+  for (let i = 0; i < files.length && i < taskInfo.count; i++) {
+    // 找到第一个空的 slot
+    let slotIdx = -1;
+    for (let s = 0; s < taskInfo.count; s++) {
+      if (!state.files[s]) { slotIdx = s; break; }
+    }
+    if (slotIdx < 0) break;  // 所有 slot 都已有文件
+    assignSlot(slotIdx, files[i]);
+    assigned++;
+  }
+  const total = Math.min(files.length, taskInfo.count);
+  if (assigned === 0) {
+    setStatus('所有素材位都已占用，请先清除一些', 'error');
+  } else {
+    setStatus(`已分配 ${assigned} 个素材，正在上传到 ${taskInfo.targets.length} 个账户...`);
+  }
+}
+
+function assignSlot(slotIdx, file) {
+  // 释放旧 blob URL
+  if (state.previewURLs[slotIdx]) {
+    URL.revokeObjectURL(state.previewURLs[slotIdx]);
+  }
+  state.files[slotIdx] = file;
+  state.previewURLs[slotIdx] = URL.createObjectURL(file);
+  renderRowHead(slotIdx, document.getElementById('rowhead_' + slotIdx));
+
+  // 对每个账户并发上传（走上传池限流）
+  for (const t of taskInfo.targets) {
+    setCellStatus(slotIdx, t.account_id, 'queued');
+    uploadPool.add(() => uploadCell(slotIdx, t.account_id, file));
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// 上传 / 清除 / 重试
+// ══════════════════════════════════════════════════════════════════
+async function uploadCell(slotIdx, accountId, file) {
+  setCellStatus(slotIdx, accountId, 'uploading', { progress: 20 });
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const r = await fetch(
+      `/upload/file?task=${taskId}&slot=${slotIdx}&account=${accountId}`,
+      { method: 'POST', body: fd }
+    );
+    const data = await r.json();
+    if (data.ok) {
+      setCellStatus(slotIdx, accountId, 'done');
+    } else {
+      setCellStatus(slotIdx, accountId, 'failed', { error: data.error || '未知错误' });
+    }
+  } catch (e) {
+    setCellStatus(slotIdx, accountId, 'failed', { error: e.message });
+  }
+}
+
+async function clearCell(slotIdx, accountId) {
+  try {
+    const r = await fetch(
+      `/upload/clear?task=${taskId}&slot=${slotIdx}&account=${accountId}`,
+      { method: 'POST' }
+    );
+    const data = await r.json();
+    if (data.ok) setCellStatus(slotIdx, accountId, 'idle');
+  } catch (e) {
+    alert('清除失败: ' + e.message);
+  }
+}
+
+async function clearRow(slotIdx) {
+  try {
+    const r = await fetch(
+      `/upload/clear?task=${taskId}&slot=${slotIdx}`,
+      { method: 'POST' }
+    );
+    const data = await r.json();
+    if (data.ok) {
+      // 本地清空
+      if (state.previewURLs[slotIdx]) {
+        URL.revokeObjectURL(state.previewURLs[slotIdx]);
+        delete state.previewURLs[slotIdx];
+      }
+      delete state.files[slotIdx];
+      renderRowHead(slotIdx, document.getElementById('rowhead_' + slotIdx));
+      for (const t of taskInfo.targets) {
+        setCellStatus(slotIdx, t.account_id, 'idle');
+      }
+    }
+  } catch (e) {
+    alert('清行失败: ' + e.message);
+  }
+}
+
+async function retryCell(slotIdx, accountId) {
+  const file = state.files[slotIdx];
+  if (!file) {
+    alert('该素材已失效，请重新拖入');
+    return;
+  }
+  setCellStatus(slotIdx, accountId, 'queued');
+  uploadPool.add(() => uploadCell(slotIdx, accountId, file));
+}
+
+// ══════════════════════════════════════════════════════════════════
+// 发布
+// ══════════════════════════════════════════════════════════════════
+async function publish() {
+  const btn = document.getElementById('publishBtn');
+  btn.disabled = true;
+  setStatus('正在保存文案...');
+
+  // 先保存一次文案
+  await saveTextToServer();
+
+  setStatus('正在并发发布到所有账户...');
+
+  try {
+    const r = await fetch('/upload/publish?task=' + taskId, { method: 'POST' });
+    const data = await r.json();
+
+    const results = data.results || [];
+    const okCount = results.filter(r => r.ok).length;
+    const failCount = results.length - okCount;
+
+    setStatus(
+      `发布完成: ${okCount} 成功, ${failCount} 失败`,
+      failCount > 0 ? 'error' : 'success'
+    );
+
+    const box = document.getElementById('resultBox');
+    box.classList.add('show');
+    const list = document.getElementById('resultList');
+    list.innerHTML = '';
+    for (const r of results) {
+      const item = document.createElement('div');
+      item.className = 'result-item ' + (r.ok ? 'ok' : 'failed');
+      item.innerHTML = r.ok
+        ? `✓ ${esc(r.account_name)} — 创建 ${r.ad_count} 条广告`
+        : `✗ ${esc(r.account_name)} — ${esc(r.error || '未知错误')}`;
+      list.appendChild(item);
+    }
+
+    if (okCount === results.length && results.length > 0) {
+      btn.textContent = '已全部发布';
+    } else {
+      btn.disabled = false;
+      btn.textContent = '重试发布';
+    }
+  } catch (e) {
+    setStatus('发布请求失败: ' + e.message, 'error');
+    btn.disabled = false;
+  }
+}
+
+function setStatus(msg, cls = '') {
+  const el = document.getElementById('statusMsg');
+  el.textContent = msg;
+  el.className = 'status-msg' + (cls ? ' ' + cls : '');
+}
+
+// ══════════════════════════════════════════════════════════════════
+// 启动
+// ══════════════════════════════════════════════════════════════════
+if (taskId) loadTask();
+</script>
+</body>
+</html>
