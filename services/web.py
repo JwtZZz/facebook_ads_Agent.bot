@@ -249,6 +249,29 @@ async def handle_upload_file(request: web.Request) -> web.Response:
     return web.json_response({"ok": True, "slot": slot_idx, "media_type": media_info["media_type"]})
 
 
+async def handle_upload_clear(request: web.Request) -> web.Response:
+    """POST /upload/clear?task=xxx&slot=N — 取消某个占位符的素材（删除临时文件，重置 slot）"""
+    task_id = request.query.get("task", "")
+    task = upload_tasks.get(task_id)
+    if not task:
+        return web.json_response({"error": "Invalid task"}, status=403)
+    if task["published"]:
+        return web.json_response({"error": "Already published"}, status=400)
+
+    slot_idx = int(request.query.get("slot", "0"))
+    if slot_idx < 0 or slot_idx >= task["count"]:
+        return web.json_response({"error": "Invalid slot"}, status=400)
+
+    old = task["slots"][slot_idx]
+    if old:
+        p = old.get("media_path")
+        if p:
+            Path(p).unlink(missing_ok=True)
+        task["slots"][slot_idx] = None
+
+    return web.json_response({"ok": True, "slot": slot_idx})
+
+
 async def handle_upload_text(request: web.Request) -> web.Response:
     """POST /upload/text?task=xxx — 保存文案和标题"""
     task_id = request.query.get("task", "")
@@ -362,6 +385,7 @@ def create_web_app() -> web.Application:
     app.router.add_get("/upload", handle_upload_page)
     app.router.add_get("/upload/info", handle_upload_info)
     app.router.add_post("/upload/file", handle_upload_file)
+    app.router.add_post("/upload/clear", handle_upload_clear)
     app.router.add_post("/upload/text", handle_upload_text)
     app.router.add_post("/upload/publish", handle_upload_publish)
     return app
