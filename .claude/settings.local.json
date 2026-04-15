@@ -60,7 +60,10 @@
       "Bash(findstr 8080)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"http://localhost:8080/dashboard?token=test\")",
       "Bash(where ngrok:*)",
-      "Bash(.venv/Scripts/python -c ':*)"
+      "Bash(.venv/Scripts/python -c ':*)",
+      "Bash(git merge:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ]
   }
 }
