@@ -28,7 +28,9 @@
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei',
+               'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji',
+               sans-serif;
   font-size: 13px;
   line-height: 1.5;
 }
@@ -197,11 +199,13 @@ h1 {
 .global-bar input[type="number"] { width: 60px; text-align: center; }
 .global-bar input.base-name { width: 220px; }
 
-/* ── 账户配置卡片（每个账户占一整行） ── */
+/* ── 账户配置卡片（每个账户一列，多账户并排） ── */
 .config-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: repeat(var(--acc-count, 1), 300px);
+  gap: 14px;
+  overflow-x: auto;
+  padding-bottom: 4px;
 }
 
 .config-card {
@@ -209,15 +213,17 @@ h1 {
   border-radius: var(--radius);
   padding: 14px 16px;
   background: #fff;
+  min-width: 0;
 }
 
 .config-card .card-head {
   display: flex;
   align-items: baseline;
-  gap: 10px;
-  margin-bottom: 10px;
-  padding-bottom: 8px;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
   border-bottom: 1px solid var(--border-light);
+  flex-wrap: wrap;
 }
 .config-card .card-head h4 {
   font-size: 13px;
@@ -231,15 +237,21 @@ h1 {
 .config-card .card-head .id {
   font-size: 10px;
   color: var(--text-faint);
-  margin-left: auto;
+  width: 100%;
+  margin-top: 2px;
+  word-break: break-all;
 }
 
-/* 字段行：label + 控件 横向排列 */
+/* 字段行：默认单列，需要时用 .row-2 变 2 列 */
 .card-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 10px 14px;
+  grid-template-columns: 1fr;
+  gap: 10px;
   margin-bottom: 10px;
+}
+.card-row.row-2 {
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 10px;
 }
 .card-row .field {
   display: flex;
@@ -322,87 +334,123 @@ h1 {
 }
 .card-actions .btn-ghost:hover { color: var(--text); border-color: var(--text); }
 
-/* ── 上传表格 ── */
-.upload-grid-wrap { overflow-x: auto; }
-
-.upload-grid {
+/* ── 账户列（垂直通道：拖拽区 + 配置 + 素材列表） ── */
+.columns-container {
   display: grid;
-  grid-template-columns: var(--left-col-width) repeat(var(--acc-count, 1), minmax(var(--acc-col-width), 1fr));
-  min-width: min-content;
-  border-top: 1px solid var(--border);
-  border-left: 1px solid var(--border);
+  grid-template-columns: repeat(var(--acc-count, 1), 320px);
+  gap: 16px;
+  overflow-x: auto;
+  padding-bottom: 8px;
 }
 
-.upload-grid > div {
-  border-right: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-  padding: 8px;
-  min-height: 72px;
+.account-column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
 }
 
-.upload-grid > .col-head,
-.upload-grid > .row-head {
+/* 列内的拖拽区（每账户一个） */
+.col-drop-zone {
+  border: 1.5px dashed var(--border);
   background: var(--bg-subtle);
-  font-weight: 500;
-  font-size: 12px;
+  border-radius: var(--radius);
+  padding: 18px 12px;
+  text-align: center;
+  cursor: pointer;
   color: var(--text-muted);
+  transition: border-color .15s, background .15s;
+}
+.col-drop-zone:hover,
+.col-drop-zone.dragover {
+  border-color: var(--text);
+  background: #f3f4f6;
+  color: var(--text);
+}
+.col-drop-zone .icon {
+  font-size: 22px;
+  opacity: .6;
+  margin-bottom: 4px;
+}
+.col-drop-zone .sub {
+  font-size: 10px;
+  color: var(--text-faint);
+  margin-top: 3px;
 }
 
-.upload-grid > .row-head {
-  position: sticky;
-  left: 0;
-  z-index: 1;
+/* 列内素材列表（垂直堆叠） */
+.slots-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.slots-list-header {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 4px 2px;
+  border-bottom: 1px solid var(--border-light);
+  margin-bottom: 2px;
 }
 
-.upload-grid > .col-head {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  min-height: 44px;
-}
-
-.upload-grid > .corner {
-  position: sticky;
-  top: 0;
-  left: 0;
-  z-index: 3;
-  background: var(--border-light);
+.slot-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px 10px;
+  background: #fff;
+  min-height: 56px;
+  position: relative;
   font-size: 11px;
   color: var(--text-faint);
 }
-
-.row-head {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  position: relative;
+.slot-item.idle {
+  border-style: dashed;
 }
+.slot-item.queued    { background: #fffbeb; color: var(--warning); }
+.slot-item.uploading { background: #f0f9ff; color: #0369a1; }
+.slot-item.done      { background: #f0fdf4; color: var(--success); border-color: #bbf7d0; }
+.slot-item.failed    { background: #fef2f2; color: var(--danger); border-color: #fecaca; }
 
-.row-head .preview {
-  max-width: 140px;
-  max-height: 78px;
-  object-fit: contain;
+.slot-item .slot-idx {
+  font-size: 10px;
+  color: var(--text-faint);
+  min-width: 28px;
+  text-align: center;
+}
+.slot-item .preview {
+  width: 60px;
+  height: 42px;
+  object-fit: cover;
   background: #000;
   border-radius: 3px;
-  pointer-events: none;
+  flex-shrink: 0;
 }
-
-.row-head .filename {
-  font-size: 10px;
-  color: var(--text-muted);
+.slot-item .info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.slot-item .info .name {
+  font-size: 11px;
+  color: var(--text);
   word-break: break-all;
-  text-align: center;
   line-height: 1.3;
-  max-width: 100%;
+  max-height: 2.6em;
+  overflow: hidden;
 }
-
-.row-head .clear-row-btn {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  background: rgba(0,0,0,0.35);
+.slot-item .info .status {
+  font-size: 10px;
+  color: inherit;
+}
+.slot-item .slot-action {
+  flex-shrink: 0;
+}
+.slot-item .clear-cell-btn {
+  background: rgba(0,0,0,0.25);
   color: #fff;
   border: none;
   border-radius: 50%;
@@ -412,85 +460,20 @@ h1 {
   font-size: 12px;
   line-height: 18px;
   text-align: center;
-  display: none;
   padding: 0;
 }
-
-.row-head:hover .clear-row-btn { display: block; }
-
-.row-head.empty {
-  color: var(--text-faint);
-  font-size: 11px;
-}
-
-/* ── 单元格状态 ── */
-.cell {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  font-size: 11px;
-  color: var(--text-faint);
-  position: relative;
-}
-
-.cell.idle   { background: #fff; }
-.cell.queued { background: #fffbeb; color: var(--warning); }
-.cell.uploading { background: #f0f9ff; color: #0369a1; }
-.cell.done   { background: #f0fdf4; color: var(--success); }
-.cell.failed { background: #fef2f2; color: var(--danger); }
-
-.cell .status-icon { font-size: 16px; }
-
-.cell .retry-btn {
+.slot-item .clear-cell-btn:hover { background: rgba(0,0,0,0.5); }
+.slot-item .retry-btn {
   background: var(--danger);
   color: #fff;
   border: none;
   border-radius: 3px;
-  padding: 2px 8px;
+  padding: 3px 8px;
   cursor: pointer;
   font-size: 10px;
   font-family: inherit;
-  margin-top: 2px;
 }
-
-.cell .retry-btn:hover { opacity: .85; }
-
-.cell .clear-cell-btn {
-  position: absolute;
-  top: 3px;
-  right: 3px;
-  background: rgba(0,0,0,0.25);
-  color: #fff;
-  border: none;
-  border-radius: 50%;
-  width: 15px;
-  height: 15px;
-  cursor: pointer;
-  font-size: 10px;
-  line-height: 15px;
-  text-align: center;
-  display: none;
-  padding: 0;
-}
-
-.cell:hover .clear-cell-btn { display: block; }
-
-.cell .progress-mini {
-  width: 72%;
-  height: 2px;
-  background: var(--border-light);
-  border-radius: 99px;
-  overflow: hidden;
-}
-
-.cell .progress-mini > div {
-  height: 100%;
-  background: #0369a1;
-  width: 0;
-  transition: width .3s;
-}
+.slot-item .retry-btn:hover { opacity: .85; }
 
 /* ── 底部操作栏 ── */
 .bottom-bar {
@@ -600,33 +583,7 @@ h1 {
   </span>
 </div>
 
-<div class="drop-zone-top" id="dropZoneTop"
-     ondragover="onDragOverTop(event)"
-     ondragleave="onDragLeaveTop(event)"
-     ondrop="onDropTop(event)"
-     onclick="openFilePickerTop()">
-  <div class="icon">↑</div>
-  <div>拖文件夹或多个文件到此处，自动按文件名顺序分配到所有账户</div>
-  <div class="sub">或点击选择多个文件</div>
-  <input type="file" id="topFileInput" multiple accept="video/*,image/*"
-         style="display:none" onchange="onFilesPickedTop(event)">
-</div>
-
-<div class="section" id="configSection">
-  <div class="section-header" onclick="toggleSection('configSection')">账户配置</div>
-  <div class="section-body">
-    <div class="config-stack" id="configStack"></div>
-  </div>
-</div>
-
-<div class="section">
-  <div class="section-header">素材上传</div>
-  <div class="section-body" style="padding: 0;">
-    <div class="upload-grid-wrap">
-      <div class="upload-grid" id="uploadGrid"></div>
-    </div>
-  </div>
-</div>
+<div class="columns-container" id="columnsContainer"></div>
 
 </div><!-- /.page-body -->
 
@@ -651,10 +608,11 @@ if (!taskId) {
 
 let taskInfo = null;       // 来自 /upload/info
 const state = {
-  files: {},               // {slotIdx: File}
-  previewURLs: {},         // {slotIdx: blob URL}
-  cells: {},               // {"slotIdx/accountId": {status, error}}
-  accountFields: {},       // {accountId: {event, url, country, device, gender, age_min, age_max, budget, title, text, edited: Set}}
+  // 每 cell (slot × account) 的文件和预览（新结构，2D）
+  cellFiles: {},            // {"slotIdx/accountId": File}
+  cellPreviews: {},         // {"slotIdx/accountId": blob URL}
+  cells: {},                // {"slotIdx/accountId": {status, filename, error, progress}}
+  accountFields: {},        // {accountId: {event, url, country, device, ..., edited: Set}}
   baseName: '',
   count: 10,
   totalCells: 0,
@@ -668,6 +626,15 @@ const EVENTS = [
   { value: 'PURCHASE', label: 'PWA' },
 ];
 const COUNTRIES = ['BR','US','IN','PH','MX','ID','VN','TH','CO','AR','PE','CL'];
+// 两位 ISO 国家代码 → 🇧🇷 / 🇺🇸 国旗 emoji（两个 regional indicator 组成）
+function flagFor(code) {
+  if (!code || code.length !== 2) return '';
+  const base = 0x1F1E6;
+  return String.fromCodePoint(
+    base + code.charCodeAt(0) - 65,
+    base + code.charCodeAt(1) - 65,
+  );
+}
 const DEVICES = ['Android', 'iOS', 'All'];
 const GENDERS = [
   { value: 0, label: '全部' },
@@ -809,41 +776,92 @@ async function loadTask() {
     }
   }
 
-  renderConfigStack();
-  renderUploadGrid();
+  renderColumns();
   updateProgress();
   updatePublishBtn();
 }
 
 // ══════════════════════════════════════════════════════════════════
-// 账户配置区 — 每账户一张全宽卡片
+// 账户列渲染 — 每账户一整列（拖拽区 + 配置卡 + 素材列表）
 // ══════════════════════════════════════════════════════════════════
-function renderConfigStack() {
-  const stack = document.getElementById('configStack');
-  stack.innerHTML = '';
+function renderColumns() {
+  const container = document.getElementById('columnsContainer');
+  container.innerHTML = '';
 
   for (const t of taskInfo.targets) {
     const aid = t.account_id;
-    const f = state.accountFields[aid];
 
+    const col = document.createElement('div');
+    col.className = 'account-column';
+    col.id = 'col_' + aid;
+
+    // 1) 拖拽区
+    const drop = document.createElement('div');
+    drop.className = 'col-drop-zone';
+    drop.innerHTML = `
+      <div class="icon">↑</div>
+      <div>拖文件到 <strong>${esc(t.account_name || aid)}</strong></div>
+      <div class="sub">或点击选择</div>
+      <input type="file" id="fileinput_${aid}" multiple accept="video/*,image/*" style="display:none">
+    `;
+    drop.addEventListener('dragover', e => {
+      e.preventDefault();
+      drop.classList.add('dragover');
+    });
+    drop.addEventListener('dragleave', () => drop.classList.remove('dragover'));
+    drop.addEventListener('drop', e => onDropColumn(e, aid));
+    drop.addEventListener('click', () => document.getElementById('fileinput_' + aid).click());
+    col.appendChild(drop);
+    // 文件选择器 change 事件（等 col 插入 dom 后绑定）
+    setTimeout(() => {
+      const input = document.getElementById('fileinput_' + aid);
+      if (input) input.addEventListener('change', e => onFilesPickedColumn(e, aid));
+    }, 0);
+
+    // 2) 配置卡
     const card = document.createElement('div');
     card.className = 'config-card';
     card.id = 'config_' + aid;
+    card.innerHTML = configCardHTML(t);
+    col.appendChild(card);
 
-    const eventOptions = EVENTS.map(e =>
-      `<option value="${e.value}" ${f.event === e.value ? 'selected' : ''}>${e.label}</option>`
-    ).join('');
-    const countryOptions = COUNTRIES.map(c =>
-      `<option value="${c}" ${f.country === c ? 'selected' : ''}>${c}</option>`
-    ).join('');
-    const deviceOptions = DEVICES.map(d =>
-      `<option value="${d}" ${f.device === d ? 'selected' : ''}>${d}</option>`
-    ).join('');
-    const genderOptions = GENDERS.map(g =>
-      `<option value="${g.value}" ${f.gender === g.value ? 'selected' : ''}>${g.label}</option>`
-    ).join('');
+    // 3) 素材列表
+    const listHeader = document.createElement('div');
+    listHeader.className = 'slots-list-header';
+    listHeader.id = 'slots_header_' + aid;
+    listHeader.textContent = `素材 0 / ${state.count}`;
+    col.appendChild(listHeader);
 
-    card.innerHTML = `
+    const list = document.createElement('div');
+    list.className = 'slots-list';
+    list.id = 'slots_' + aid;
+    col.appendChild(list);
+
+    container.appendChild(col);
+    renderSlotList(aid);
+  }
+  updateSyncHints();
+  updateSlotsHeaders();
+}
+
+function configCardHTML(t) {
+  const aid = t.account_id;
+  const f = state.accountFields[aid];
+
+  const eventOptions = EVENTS.map(e =>
+    `<option value="${e.value}" ${f.event === e.value ? 'selected' : ''}>${e.label}</option>`
+  ).join('');
+  const countryOptions = COUNTRIES.map(c =>
+    `<option value="${c}" ${f.country === c ? 'selected' : ''}>${flagFor(c)} ${c}</option>`
+  ).join('');
+  const deviceOptions = DEVICES.map(d =>
+    `<option value="${d}" ${f.device === d ? 'selected' : ''}>${d}</option>`
+  ).join('');
+  const genderOptions = GENDERS.map(g =>
+    `<option value="${g.value}" ${f.gender === g.value ? 'selected' : ''}>${g.label}</option>`
+  ).join('');
+
+  return `
       <div class="card-head">
         <h4>${esc(t.account_name || aid)}</h4>
         <span class="alias">${esc(t.account_alias || '')}</span>
@@ -855,28 +873,34 @@ function renderConfigStack() {
           <label>转化事件</label>
           <select id="event_${aid}" onchange="onFieldChange('${aid}','event')">${eventOptions}</select>
         </div>
-        <div class="field" style="grid-column: span 2;">
-          <label>落地页 URL</label>
-          <input type="text" id="landing_url_${aid}" value="${esc(f.landing_url)}"
-                 placeholder="https://..." oninput="onFieldChange('${aid}','landing_url')">
-        </div>
-        <div class="field">
-          <label>国家</label>
-          <select id="country_${aid}" onchange="onFieldChange('${aid}','country')">${countryOptions}</select>
-        </div>
       </div>
 
       <div class="card-row">
         <div class="field">
+          <label>落地页 URL</label>
+          <input type="text" id="landing_url_${aid}" value="${esc(f.landing_url)}"
+                 placeholder="https://..." oninput="onFieldChange('${aid}','landing_url')">
+        </div>
+      </div>
+
+      <div class="card-row row-2">
+        <div class="field">
+          <label>国家</label>
+          <select id="country_${aid}" onchange="onFieldChange('${aid}','country')">${countryOptions}</select>
+        </div>
+        <div class="field">
           <label>设备</label>
           <select id="device_${aid}" onchange="onFieldChange('${aid}','device')">${deviceOptions}</select>
         </div>
+      </div>
+
+      <div class="card-row row-2">
         <div class="field">
           <label>性别</label>
           <select id="gender_${aid}" onchange="onFieldChange('${aid}','gender')">${genderOptions}</select>
         </div>
         <div class="field">
-          <label>年龄范围</label>
+          <label>年龄</label>
           <div class="age-range">
             <input type="number" id="age_min_${aid}" min="13" max="65" value="${f.age_min}"
                    oninput="onFieldChange('${aid}','age_min')">
@@ -885,6 +909,9 @@ function renderConfigStack() {
                    oninput="onFieldChange('${aid}','age_max')">
           </div>
         </div>
+      </div>
+
+      <div class="card-row">
         <div class="field">
           <label>单账户日预算 ($)</label>
           <input type="number" id="budget_${aid}" min="1" step="1" value="${f.budget}"
@@ -893,12 +920,15 @@ function renderConfigStack() {
       </div>
 
       <div class="card-row">
-        <div class="field" style="grid-column: span 2;">
+        <div class="field">
           <label>广告标题</label>
           <input type="text" id="title_${aid}" value="${esc(f.title)}"
                  placeholder="输入标题..." oninput="onFieldChange('${aid}','title')">
         </div>
-        <div class="field" style="grid-column: span 2;">
+      </div>
+
+      <div class="card-row">
+        <div class="field">
           <label>广告文案</label>
           <textarea id="text_${aid}" placeholder="输入广告正文..."
                     oninput="onFieldChange('${aid}','text')">${esc(f.text)}</textarea>
@@ -906,12 +936,92 @@ function renderConfigStack() {
       </div>
 
       <div class="synced-hint" id="syncHint_${aid}" style="display:none">
-        🔄 跟随其他账户自动同步（手动修改某字段后该字段解除同步）
+        🔄 跟随其他账户同步
       </div>
-    `;
-    stack.appendChild(card);
+  `;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// 素材列表（每列内部的垂直槽位）
+// ══════════════════════════════════════════════════════════════════
+function renderSlotList(accountId) {
+  const list = document.getElementById('slots_' + accountId);
+  if (!list) return;
+  list.innerHTML = '';
+  for (let i = 0; i < state.count; i++) {
+    const item = document.createElement('div');
+    item.id = `slot_${i}_${accountId}`;
+    renderSlot(i, accountId, item);
+    list.appendChild(item);
   }
-  updateSyncHints();
+}
+
+function renderSlot(slotIdx, accountId, el) {
+  const key = cellKey(slotIdx, accountId);
+  const cell = state.cells[key] || { status: 'idle' };
+  const file = state.cellFiles[key];
+  const previewURL = state.cellPreviews[key];
+
+  el.className = 'slot-item ' + cell.status;
+
+  if (cell.status === 'idle') {
+    el.innerHTML = `
+      <div class="slot-idx">${slotIdx + 1}</div>
+      <div class="info"><div class="name" style="color:var(--text-faint)">空</div></div>
+    `;
+    return;
+  }
+
+  let previewTag = '';
+  if (file) {
+    previewTag = isVideo(file)
+      ? `<video class="preview" src="${previewURL}#t=0.1" preload="metadata" muted playsinline></video>`
+      : `<img class="preview" src="${previewURL}" alt="">`;
+  } else {
+    previewTag = `<div class="preview" style="display:flex;align-items:center;justify-content:center;color:#fff;font-size:9px">${esc(cell.filename || '').slice(0, 16)}</div>`;
+  }
+
+  let statusText = '';
+  let action = '';
+  if (cell.status === 'queued') {
+    statusText = '⏳ 排队';
+  } else if (cell.status === 'uploading') {
+    statusText = `⬆ 上传中 ${cell.progress || ''}`;
+  } else if (cell.status === 'done') {
+    statusText = '✓ 完成';
+    action = `<button class="clear-cell-btn" onclick="event.stopPropagation();clearCell(${slotIdx},'${accountId}')">×</button>`;
+  } else if (cell.status === 'failed') {
+    statusText = '✗ ' + (cell.error || '失败').slice(0, 24);
+    action = `<button class="retry-btn" onclick="event.stopPropagation();retryCell(${slotIdx},'${accountId}')">重试</button>`;
+  }
+
+  el.innerHTML = `
+    <div class="slot-idx">${slotIdx + 1}</div>
+    ${previewTag}
+    <div class="info">
+      <div class="name">${esc(file?.name || cell.filename || '')}</div>
+      <div class="status">${statusText}</div>
+    </div>
+    <div class="slot-action">${action}</div>
+  `;
+}
+
+function reRenderSlot(slotIdx, accountId) {
+  const el = document.getElementById(`slot_${slotIdx}_${accountId}`);
+  if (el) renderSlot(slotIdx, accountId, el);
+}
+
+function updateSlotsHeaders() {
+  for (const t of taskInfo.targets) {
+    const header = document.getElementById('slots_header_' + t.account_id);
+    if (!header) continue;
+    let filled = 0;
+    for (let i = 0; i < state.count; i++) {
+      const c = state.cells[cellKey(i, t.account_id)];
+      if (c && c.status === 'done') filled++;
+    }
+    header.textContent = `素材 ${filled} / ${state.count}`;
+  }
 }
 
 function onFieldChange(accountId, field) {
@@ -951,27 +1061,27 @@ function onGlobalChange(what) {
     state.baseName = document.getElementById('baseNameInput').value || '';
   } else if (what === 'count') {
     const newCount = Math.max(1, Math.min(50, parseInt(document.getElementById('countInput').value, 10) || 10));
+    const oldN = state.count;
     state.count = newCount;
-    // 重算 total cells + 重新渲染 upload grid
     state.totalCells = taskInfo.targets.length * newCount;
-    // 对于新增的 slot 行初始化 cells
-    const oldN = taskInfo.count;
+
     if (newCount > oldN) {
+      // 新增行 → 所有账户对应 cell 标记为 idle
       for (let i = oldN; i < newCount; i++) {
         for (const t of taskInfo.targets) {
           state.cells[cellKey(i, t.account_id)] = { status: 'idle' };
         }
       }
     } else if (newCount < oldN) {
-      // 清掉多余行的本地状态（本地 File，后端清除走 /upload/config 触发）
+      // 清掉多余行的本地状态 + 预览 URL
       for (let i = newCount; i < oldN; i++) {
-        if (state.previewURLs[i]) {
-          URL.revokeObjectURL(state.previewURLs[i]);
-          delete state.previewURLs[i];
-        }
-        delete state.files[i];
         for (const t of taskInfo.targets) {
           const key = cellKey(i, t.account_id);
+          if (state.cellPreviews[key]) {
+            URL.revokeObjectURL(state.cellPreviews[key]);
+            delete state.cellPreviews[key];
+          }
+          delete state.cellFiles[key];
           if (state.cells[key]?.status === 'done') state.doneCells--;
           delete state.cells[key];
         }
@@ -981,7 +1091,10 @@ function onGlobalChange(what) {
     const m = taskInfo.targets.length;
     document.getElementById('taskInfo').textContent =
       `${m} 个账户 · 每账户 ${newCount} 条广告 · 共 ${m * newCount} 个上传格`;
-    renderUploadGrid();
+
+    // 重新渲染每账户的素材列表
+    for (const t of taskInfo.targets) renderSlotList(t.account_id);
+    updateSlotsHeaders();
     updateProgress();
     updatePublishBtn();
   }
@@ -1010,7 +1123,12 @@ function syncToAll() {
     }
     dst.edited = new Set();
   }
-  renderConfigStack();
+  // 只重渲染配置卡，不碰 slot 列表和拖拽区（保留已上传状态）
+  for (const t of taskInfo.targets) {
+    const card = document.getElementById('config_' + t.account_id);
+    if (card) card.innerHTML = configCardHTML(t);
+  }
+  updateSyncHints();
   scheduleSaveConfig();
 }
 
@@ -1052,89 +1170,8 @@ async function saveConfigToServer() {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// 上传表格
+// 状态更新 / 进度 / 发布按钮
 // ══════════════════════════════════════════════════════════════════
-function renderUploadGrid() {
-  const grid = document.getElementById('uploadGrid');
-  grid.innerHTML = '';
-
-  // 左上角空格
-  const corner = document.createElement('div');
-  corner.className = 'corner col-head';
-  corner.textContent = '素材 \\ 账户';
-  grid.appendChild(corner);
-
-  // 列头：账户
-  for (const t of taskInfo.targets) {
-    const h = document.createElement('div');
-    h.className = 'col-head';
-    h.innerHTML = `<div>${esc(t.account_name || t.account_id)}</div>
-                   <div style="font-size:10px;color:#999">${esc(t.account_alias || '')}</div>`;
-    grid.appendChild(h);
-  }
-
-  // 每行：素材
-  for (let i = 0; i < taskInfo.count; i++) {
-    // 行头
-    const rh = document.createElement('div');
-    rh.className = 'row-head';
-    rh.id = 'rowhead_' + i;
-    renderRowHead(i, rh);
-    grid.appendChild(rh);
-
-    // 每个账户的 cell
-    for (const t of taskInfo.targets) {
-      const cell = document.createElement('div');
-      cell.className = 'cell';
-      cell.id = 'cell_' + cellKey(i, t.account_id);
-      renderCell(i, t.account_id, cell);
-      grid.appendChild(cell);
-    }
-  }
-}
-
-function renderRowHead(slotIdx, el) {
-  const file = state.files[slotIdx];
-  if (!file) {
-    el.classList.add('empty');
-    el.innerHTML = `<div>素材 ${slotIdx + 1}</div><div style="font-size:10px">（空）</div>`;
-    return;
-  }
-  el.classList.remove('empty');
-  const url = state.previewURLs[slotIdx] || '';
-  const previewTag = isVideo(file)
-    ? `<video class="preview" src="${url}#t=0.1" preload="metadata" muted playsinline></video>`
-    : `<img class="preview" src="${url}" alt="">`;
-  el.innerHTML = `
-    ${previewTag}
-    <div class="filename">${esc(file.name)}</div>
-    <button class="clear-row-btn" onclick="event.stopPropagation();clearRow(${slotIdx})" title="清除此素材">×</button>
-  `;
-}
-
-function renderCell(slotIdx, accountId, el) {
-  const key = cellKey(slotIdx, accountId);
-  const c = state.cells[key] || { status: 'idle' };
-  el.className = 'cell ' + c.status;
-
-  let inner = '';
-  if (c.status === 'idle') {
-    inner = '<div style="color:#ccc">—</div>';
-  } else if (c.status === 'queued') {
-    inner = '<div class="status-icon">⏳</div><div>排队中</div>';
-  } else if (c.status === 'uploading') {
-    inner = `<div class="status-icon">⬆</div><div>上传中</div>
-             <div class="progress-mini"><div style="width:${c.progress || 30}%"></div></div>`;
-  } else if (c.status === 'done') {
-    inner = `<div class="status-icon">✓</div><div>已完成</div>
-             <button class="clear-cell-btn" onclick="event.stopPropagation();clearCell(${slotIdx},'${accountId}')" title="取消">×</button>`;
-  } else if (c.status === 'failed') {
-    inner = `<div class="status-icon">✗</div><div>失败</div>
-             <button class="retry-btn" onclick="retryCell(${slotIdx},'${accountId}')">重试</button>`;
-  }
-  el.innerHTML = inner;
-}
-
 function setCellStatus(slotIdx, accountId, status, extra = {}) {
   const key = cellKey(slotIdx, accountId);
   const prev = state.cells[key] || {};
@@ -1142,9 +1179,9 @@ function setCellStatus(slotIdx, accountId, status, extra = {}) {
   state.cells[key] = { ...prev, status, ...extra };
   if (status === 'done' && !wasDone) state.doneCells++;
   if (status !== 'done' && wasDone) state.doneCells--;
-  const el = document.getElementById('cell_' + key);
-  if (el) renderCell(slotIdx, accountId, el);
+  reRenderSlot(slotIdx, accountId);
   updateProgress();
+  updateSlotsHeaders();
   updatePublishBtn();
 }
 
@@ -1158,11 +1195,10 @@ function updateProgress() {
 
 function updatePublishBtn() {
   const btn = document.getElementById('publishBtn');
-  // 至少每个账户有 1 个 done 才能发布
   let canPublish = false;
   if (taskInfo) {
     canPublish = taskInfo.targets.every(t => {
-      for (let i = 0; i < taskInfo.count; i++) {
+      for (let i = 0; i < state.count; i++) {
         if (state.cells[cellKey(i, t.account_id)]?.status === 'done') return true;
       }
       return false;
@@ -1170,23 +1206,17 @@ function updatePublishBtn() {
   }
   btn.disabled = !canPublish;
   btn.textContent = canPublish
-    ? `一键发布到 ${taskInfo.targets.length} 个账户`
+    ? `一键创建 + 发布（${taskInfo.targets.length} 个账户）`
     : '至少每账户传 1 个素材才能发布';
 }
 
 // ══════════════════════════════════════════════════════════════════
-// 拖拽文件 / 选择文件
+// 每列拖拽 / 文件选择
 // ══════════════════════════════════════════════════════════════════
-function onDragOverTop(e) {
+async function onDropColumn(e, accountId) {
   e.preventDefault();
-  document.getElementById('dropZoneTop').classList.add('dragover');
-}
-function onDragLeaveTop(e) {
-  document.getElementById('dropZoneTop').classList.remove('dragover');
-}
-async function onDropTop(e) {
-  e.preventDefault();
-  document.getElementById('dropZoneTop').classList.remove('dragover');
+  const zone = e.currentTarget;
+  zone.classList.remove('dragover');
 
   let files = [];
   const items = e.dataTransfer.items;
@@ -1200,14 +1230,11 @@ async function onDropTop(e) {
   } else {
     files = [...e.dataTransfer.files];
   }
-  assignBatch(sortFiles(filterMedia(files)));
+  assignBatchToColumn(accountId, sortFiles(filterMedia(files)));
 }
 
-function openFilePickerTop() {
-  document.getElementById('topFileInput').click();
-}
-function onFilesPickedTop(e) {
-  assignBatch(sortFiles(filterMedia([...e.target.files])));
+function onFilesPickedColumn(e, accountId) {
+  assignBatchToColumn(accountId, sortFiles(filterMedia([...e.target.files])));
   e.target.value = '';
 }
 
@@ -1231,44 +1258,38 @@ function walkEntry(entry, files) {
   });
 }
 
-function assignBatch(files) {
+function assignBatchToColumn(accountId, files) {
   if (!files.length) {
     setStatus('未找到视频或图片文件', 'error');
     return;
   }
   let assigned = 0;
-  for (let i = 0; i < files.length && i < taskInfo.count; i++) {
-    // 找到第一个空的 slot
+  for (const file of files) {
+    // 在该账户的 slot 列表里找第一个 idle 格子
     let slotIdx = -1;
-    for (let s = 0; s < taskInfo.count; s++) {
-      if (!state.files[s]) { slotIdx = s; break; }
+    for (let s = 0; s < state.count; s++) {
+      const c = state.cells[cellKey(s, accountId)] || { status: 'idle' };
+      if (c.status === 'idle') { slotIdx = s; break; }
     }
-    if (slotIdx < 0) break;  // 所有 slot 都已有文件
-    assignSlot(slotIdx, files[i]);
+    if (slotIdx < 0) break;
+    assignCell(slotIdx, accountId, file);
     assigned++;
   }
-  const total = Math.min(files.length, taskInfo.count);
   if (assigned === 0) {
-    setStatus('所有素材位都已占用，请先清除一些', 'error');
+    setStatus('该账户的素材位都已占用，请先清除或增大广告数', 'error');
   } else {
-    setStatus(`已分配 ${assigned} 个素材，正在上传到 ${taskInfo.targets.length} 个账户...`);
+    const acctName = taskInfo.targets.find(t => t.account_id === accountId)?.account_name || accountId;
+    setStatus(`已向 ${acctName} 分配 ${assigned} 个素材`);
   }
 }
 
-function assignSlot(slotIdx, file) {
-  // 释放旧 blob URL
-  if (state.previewURLs[slotIdx]) {
-    URL.revokeObjectURL(state.previewURLs[slotIdx]);
-  }
-  state.files[slotIdx] = file;
-  state.previewURLs[slotIdx] = URL.createObjectURL(file);
-  renderRowHead(slotIdx, document.getElementById('rowhead_' + slotIdx));
-
-  // 对每个账户并发上传（走上传池限流）
-  for (const t of taskInfo.targets) {
-    setCellStatus(slotIdx, t.account_id, 'queued');
-    uploadPool.add(() => uploadCell(slotIdx, t.account_id, file));
-  }
+function assignCell(slotIdx, accountId, file) {
+  const key = cellKey(slotIdx, accountId);
+  if (state.cellPreviews[key]) URL.revokeObjectURL(state.cellPreviews[key]);
+  state.cellFiles[key] = file;
+  state.cellPreviews[key] = URL.createObjectURL(file);
+  setCellStatus(slotIdx, accountId, 'queued', { filename: file.name });
+  uploadPool.add(() => uploadCell(slotIdx, accountId, file));
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -1301,38 +1322,23 @@ async function clearCell(slotIdx, accountId) {
       { method: 'POST' }
     );
     const data = await r.json();
-    if (data.ok) setCellStatus(slotIdx, accountId, 'idle');
+    if (data.ok) {
+      const key = cellKey(slotIdx, accountId);
+      if (state.cellPreviews[key]) {
+        URL.revokeObjectURL(state.cellPreviews[key]);
+        delete state.cellPreviews[key];
+      }
+      delete state.cellFiles[key];
+      setCellStatus(slotIdx, accountId, 'idle', { filename: '' });
+    }
   } catch (e) {
     alert('清除失败: ' + e.message);
   }
 }
 
-async function clearRow(slotIdx) {
-  try {
-    const r = await fetch(
-      `/upload/clear?task=${taskId}&slot=${slotIdx}`,
-      { method: 'POST' }
-    );
-    const data = await r.json();
-    if (data.ok) {
-      // 本地清空
-      if (state.previewURLs[slotIdx]) {
-        URL.revokeObjectURL(state.previewURLs[slotIdx]);
-        delete state.previewURLs[slotIdx];
-      }
-      delete state.files[slotIdx];
-      renderRowHead(slotIdx, document.getElementById('rowhead_' + slotIdx));
-      for (const t of taskInfo.targets) {
-        setCellStatus(slotIdx, t.account_id, 'idle');
-      }
-    }
-  } catch (e) {
-    alert('清行失败: ' + e.message);
-  }
-}
-
 async function retryCell(slotIdx, accountId) {
-  const file = state.files[slotIdx];
+  const key = cellKey(slotIdx, accountId);
+  const file = state.cellFiles[key];
   if (!file) {
     alert('该素材已失效，请重新拖入');
     return;
@@ -1347,12 +1353,12 @@ async function retryCell(slotIdx, accountId) {
 async function publish() {
   const btn = document.getElementById('publishBtn');
   btn.disabled = true;
-  setStatus('正在保存文案...');
+  setStatus('正在保存配置...');
 
-  // 先保存一次文案
-  await saveTextToServer();
+  // 先保存一次配置（文案/定向/URL 等）
+  await saveConfigToServer();
 
-  setStatus('正在并发发布到所有账户...');
+  setStatus('正在并发创建系列并发布到所有账户...');
 
   try {
     const r = await fetch('/upload/publish?task=' + taskId, { method: 'POST' });
