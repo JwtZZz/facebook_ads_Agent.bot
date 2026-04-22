@@ -1,5 +1,6 @@
 """Web 服务：Dashboard HTTP + WebSocket 实时推送 + 素材上传"""
 import asyncio
+import hashlib
 import json
 import logging
 import os
@@ -21,6 +22,19 @@ DASHBOARD_SECRET = os.getenv("DASHBOARD_SECRET", "admin")
 ws_connections: set[web.WebSocketResponse] = set()
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return max(1, int(os.getenv(name, str(default))))
+    except (TypeError, ValueError):
+        return default
+
+
+UPLOAD_FB_MAX_CONCURRENCY = _env_int("UPLOAD_FB_MAX_CONCURRENCY", 4)
+UPLOAD_FB_PER_ACCOUNT_CONCURRENCY = _env_int("UPLOAD_FB_PER_ACCOUNT_CONCURRENCY", 1)
+upload_fb_semaphore = asyncio.Semaphore(UPLOAD_FB_MAX_CONCURRENCY)
+account_upload_semaphores: dict[str, asyncio.Semaphore] = {}
 
 
 # ── 推送 ───────────────────────────────────────────────────────
@@ -186,6 +200,77 @@ async def handle_ws(request: web.Request) -> web.WebSocketResponse:
 upload_tasks: dict[str, dict] = {}
 
 
+def _ensure_upload_runtime(task: dict) -> dict:
+    runtime = task.get("_upload_runtime")
+    if runtime is None:
+        runtime = {
+            "asset_cache": {},
+            "upload_jobs": {},
+        }
+        task["_upload_runtime"] = runtime
+    return runtime
+
+
+def _get_account_upload_semaphore(account_id: str) -> asyncio.Semaphore:
+    sem = account_upload_semaphores.get(account_id)
+    if sem is None:
+        sem = asyncio.Semaphore(UPLOAD_FB_PER_ACCOUNT_CONCURRENCY)
+        account_upload_semaphores[account_id] = sem
+    return sem
+
+
+def _upload_cache_key(account_id: str, media_type: str, digest: str) -> str:
+    return f"{account_id}:{media_type}:{digest}"
+
+
+async def _upload_media_for_target(
+    task: dict,
+    target: dict,
+    media_path: str,
+    filename: str,
+    media_type: str,
+    cache_key: str,
+) -> dict:
+    runtime = _ensure_upload_runtime(task)
+    cached = runtime["asset_cache"].get(cache_key)
+    if cached:
+        return cached
+
+    job = runtime["upload_jobs"].get(cache_key)
+    if job is None:
+        loop = asyncio.get_running_loop()
+
+        async def run_upload():
+            fb = _build_fb_for_target(task["token"], target)
+            async with upload_fb_semaphore:
+                async with _get_account_upload_semaphore(target["account_id"]):
+                    if media_type == "image":
+                        media_hash = await loop.run_in_executor(None, fb.upload_image, media_path)
+                        return {
+                            "media_type": "image",
+                            "media_id": "",
+                            "media_hash": media_hash,
+                        }
+
+                    video_id = await loop.run_in_executor(None, fb.upload_video, media_path, filename)
+                    return {
+                        "media_type": "video",
+                        "media_id": video_id,
+                        "media_hash": "",
+                    }
+
+        job = asyncio.create_task(run_upload())
+        runtime["upload_jobs"][cache_key] = job
+
+    try:
+        result = await job
+        runtime["asset_cache"][cache_key] = result
+        return result
+    finally:
+        if job.done() and runtime["upload_jobs"].get(cache_key) is job:
+            runtime["upload_jobs"].pop(cache_key, None)
+
+
 def _empty_slot_row(account_ids: list[str]) -> dict:
     """初始化一行（所有账户的 cell 都是 idle）"""
     return {
@@ -229,11 +314,14 @@ def create_multi_upload_task(
         t.setdefault("age_min", 18)
         t.setdefault("age_max", 45)
         t.setdefault("budget", 20.0)
+        t.setdefault("campaign_name", "")
         t.setdefault("title", "")
         t.setdefault("text", "")
         t.setdefault("status", "pending")
         t.setdefault("error", "")
         t.setdefault("ad_ids", [])
+        t.setdefault("available_pages", [])
+        t.setdefault("available_pixels", [])
 
     account_ids = [t["account_id"] for t in targets]
     upload_tasks[task_id] = {
@@ -348,24 +436,27 @@ async def handle_upload_info(request: web.Request) -> web.Response:
         "base_name": task.get("base_name", ""),
         "targets": [
             {
-                "account_id":    t["account_id"],
-                "account_name":  t.get("account_name", ""),
-                "account_alias": t.get("account_alias", ""),
-                "page_id":       t.get("page_id", ""),
-                "pixel_id":      t.get("pixel_id", ""),
-                "landing_url":   t.get("landing_url", ""),
-                "event":         t.get("event", ""),
-                "cta":           t.get("cta", ""),
-                "country":       t.get("country", ""),
-                "device":        t.get("device", ""),
-                "gender":        t.get("gender", 0),
-                "age_min":       t.get("age_min", 18),
-                "age_max":       t.get("age_max", 45),
-                "budget":        t.get("budget", 20.0),
-                "title":         t.get("title", ""),
-                "text":          t.get("text", ""),
-                "campaign_id":   t.get("campaign_id", ""),
-                "adset_id":      t.get("adset_id", ""),
+                "account_id":       t["account_id"],
+                "account_name":     t.get("account_name", ""),
+                "account_alias":    t.get("account_alias", ""),
+                "campaign_name":    t.get("campaign_name", ""),
+                "page_id":          t.get("page_id", ""),
+                "pixel_id":         t.get("pixel_id", ""),
+                "available_pages":  t.get("available_pages", []),
+                "available_pixels": t.get("available_pixels", []),
+                "landing_url":      t.get("landing_url", ""),
+                "event":            t.get("event", ""),
+                "cta":              t.get("cta", ""),
+                "country":          t.get("country", ""),
+                "device":           t.get("device", ""),
+                "gender":           t.get("gender", 0),
+                "age_min":          t.get("age_min", 18),
+                "age_max":          t.get("age_max", 65),
+                "budget":           t.get("budget", 20.0),
+                "title":            t.get("title", ""),
+                "text":             t.get("text", ""),
+                "campaign_id":      t.get("campaign_id", ""),
+                "adset_id":         t.get("adset_id", ""),
             }
             for t in task["targets"]
         ],
@@ -450,6 +541,7 @@ async def handle_upload_config(request: web.Request) -> web.Response:
     by_id = {t["account_id"]: t for t in task["targets"]}
     accounts_data = body.get("accounts", []) or []
     allowed_fields = {
+        "campaign_name", "page_id", "pixel_id",
         "event", "landing_url", "country", "device", "gender",
         "age_min", "age_max", "budget", "title", "text",
     }
@@ -515,13 +607,16 @@ async def handle_upload_file(request: web.Request) -> web.Response:
     filename = field.filename or "media"
     is_image = any(filename.lower().endswith(ext)
                    for ext in [".jpg", ".jpeg", ".png", ".gif", ".webp"])
+    media_type = "image" if is_image else "video"
     suffix = ".jpg" if is_image else ".mp4"
 
     tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+    hasher = hashlib.sha256()
     while True:
         chunk = await field.read_chunk()
         if not chunk:
             break
+        hasher.update(chunk)
         tmp.write(chunk)
     tmp.close()
 
@@ -532,29 +627,23 @@ async def handle_upload_file(request: web.Request) -> web.Response:
     row[account_id]["error"] = ""
 
     # 上传到 FB（这个 cell 对应的账户）
-    fb = _build_fb_for_target(task["token"], target)
-    loop = asyncio.get_event_loop()
+    cache_key = _upload_cache_key(account_id, media_type, hasher.hexdigest())
     try:
-        if is_image:
-            media_hash = await loop.run_in_executor(None, fb.upload_image, tmp.name)
-            row[account_id].update({
-                "status": "done",
-                "media_type": "image",
-                "media_id": "",
-                "media_hash": media_hash,
-                "media_path": tmp.name,
-            })
-            result_type = "image"
-        else:
-            video_id = await loop.run_in_executor(None, fb.upload_video, tmp.name, filename)
-            row[account_id].update({
-                "status": "done",
-                "media_type": "video",
-                "media_id": video_id,
-                "media_hash": "",
-                "media_path": tmp.name,
-            })
-            result_type = "video"
+        upload_result = await _upload_media_for_target(
+            task=task,
+            target=target,
+            media_path=tmp.name,
+            filename=filename,
+            media_type=media_type,
+            cache_key=cache_key,
+        )
+        row[account_id].update({
+            "status": "done",
+            "media_type": upload_result["media_type"],
+            "media_id": upload_result["media_id"],
+            "media_hash": upload_result["media_hash"],
+            "media_path": tmp.name,
+        })
     except Exception as e:
         Path(tmp.name).unlink(missing_ok=True)
         row[account_id]["status"] = "failed"
@@ -565,7 +654,7 @@ async def handle_upload_file(request: web.Request) -> web.Response:
         "ok": True,
         "slot": slot_idx,
         "account": account_id,
-        "media_type": result_type,
+        "media_type": upload_result["media_type"],
     })
 
 
@@ -772,7 +861,7 @@ async def handle_upload_publish(request: web.Request) -> web.Response:
             token=token,
             page_id=t.get("page_id", ""),
             pixel_id=t.get("pixel_id", ""),
-            campaign_name=f"{base_name}-{alias}",
+            campaign_name=t.get("campaign_name", "") or f"{base_name}-{alias}",
             daily_budget_usd=float(t.get("budget", 20.0)),
             country=t.get("country", "BR"),
             device_os=t.get("device", "Android"),

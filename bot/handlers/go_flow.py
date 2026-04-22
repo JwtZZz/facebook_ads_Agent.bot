@@ -19,7 +19,7 @@ import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 
-from services.fb_fetch import fetch_bm_all
+from services.fb_fetch import fetch_bm_all, fetch_pixels_for_accounts, fetch_pages_for_accounts
 from services.web import create_multi_upload_task
 from store.pool import (
     get_chat_pool, save_bm_metadata, save_last_used, has_bm_metadata,
@@ -47,14 +47,14 @@ async def go_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     hint = ""
     if has_bm_metadata(chat_id):
-        hint = "（之前已拉取过 BM 元数据，重粘 token 会刷新账户列表）\n"
+        hint = "检测到历史 BM 数据。重新发送 token 会刷新账户列表。\n"
 
     await update.message.reply_text(
-        f"🚀 批量投放 /go\n\n"
-        f"🔑 请粘贴 Access Token（EAA 开头）\n"
+        f"批量投放\n\n"
+        f"第 1 步：发送 Access Token（EAA 开头）\n"
         f"{hint}"
-        f"\n其他配置（定向/预算/URL 等）都在网页上填\n\n"
-        f"发 /cancel 取消"
+        f"\n后续会先选账户，其他配置在网页里完成。\n"
+        f"发送 /cancel 可退出。"
     )
     return GO_TOKEN
 
@@ -63,20 +63,21 @@ async def go_token_input(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """收到 token → 并发拉取 BM accounts/pages/pixels → 落盘 → 进账户选择"""
     token = (update.message.text or "").strip()
     if len(token) < 20:
-        await update.message.reply_text("❌ Token 太短，请重新发送：")
+        await update.message.reply_text("Token 长度不对，请重新发送。")
         return GO_TOKEN
 
-    msg = await update.message.reply_text("⏳ 正在拉取 BM 的账户 / 主页 / 像素...")
+    msg = await update.message.reply_text("正在拉取账户、主页和像素，请稍候。")
 
     loop = asyncio.get_event_loop()
     accounts, pages, pixels = await loop.run_in_executor(None, fetch_bm_all, token)
 
     if not accounts:
         await msg.edit_text(
-            "❌ 没拉到任何广告账户。可能原因：\n"
-            "  • Token 无效或已过期\n"
-            "  • Token 没有 ads_management 权限\n\n"
-            "请重新发送 Token："
+            "没有拉到任何广告账户。\n\n"
+            "可能原因：\n"
+            "• Token 无效或已过期\n"
+            "• Token 缺少 ads_management 权限\n\n"
+            "请重新发送 token。"
         )
         return GO_TOKEN
 
@@ -85,10 +86,10 @@ async def go_token_input(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     save_bm_metadata(chat_id, accounts, pages, pixels)
 
     await msg.edit_text(
-        f"✅ 拉取完成\n"
-        f"  • 账户: {len(accounts)}\n"
-        f"  • 主页: {len(pages)}\n"
-        f"  • 像素: {len(pixels)}"
+        f"拉取完成\n\n"
+        f"账户 {len(accounts)} 个\n"
+        f"主页 {len(pages)} 个\n"
+        f"像素 {len(pixels)} 个"
     )
 
     return await _show_account_selection(update, ctx)
@@ -121,9 +122,9 @@ async def _show_account_selection(update: Update, ctx: ContextTypes.DEFAULT_TYPE
 
     keyboard = _build_account_keyboard(accounts, selected)
     text = (
-        f"🏦 请选择要投放的广告账户（多选）\n"
+        f"第 2 步：选择投放账户\n\n"
         f"共 {len(accounts)} 个，已选 {len(selected)} 个\n"
-        f"✓ 点击切换选中状态 → 点「下一步」继续"
+        f"点击账户可切换选中状态。"
     )
     target_send = (
         update.message.reply_text if update.message else update.effective_chat.send_message
@@ -141,15 +142,15 @@ def _build_account_keyboard(accounts: list, selected: set) -> list:
         status = acc.get("account_status", 0)
         icon = status_icons.get(status, "⚪")
         check = "☑" if acc_id in selected else "☐"
-        label = f"{check} {icon} {name[:20]} ({acc_id[-6:]})"
+        label = f"{check} {name[:18]} · {acc_id[-6:]} {icon}"
         rows.append([InlineKeyboardButton(label, callback_data=f"go_acc_toggle:{i}")])
 
     rows.append([
-        InlineKeyboardButton("☑ 全选", callback_data="go_acc_all"),
-        InlineKeyboardButton("☐ 清空", callback_data="go_acc_none"),
+        InlineKeyboardButton("全选", callback_data="go_acc_all"),
+        InlineKeyboardButton("清空", callback_data="go_acc_none"),
     ])
     rows.append([
-        InlineKeyboardButton("✅ 下一步", callback_data="go_acc_next"),
+        InlineKeyboardButton("下一步", callback_data="go_acc_next"),
     ])
     return rows
 
@@ -172,14 +173,14 @@ async def go_account_toggle(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         selected = set()
     elif data == "go_acc_next":
         if not selected:
-            await query.answer("⚠️ 至少选一个账户", show_alert=True)
+            await query.answer("至少选择一个账户。", show_alert=True)
             return GO_ACCOUNTS
         selected_list = [
             acc for acc in accounts
             if (acc.get("account_id") or acc.get("id", "").replace("act_", "")) in selected
         ]
         ctx.chat_data["go_selected_accounts"] = selected_list
-        return await _show_page_selection(update, ctx, query.message)
+        return await _finalize(update, ctx, query.message)
     elif data.startswith("go_acc_toggle:"):
         idx = int(data.split(":")[1])
         if 0 <= idx < len(accounts):
@@ -193,7 +194,7 @@ async def go_account_toggle(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ctx.chat_data["go_selected_accounts_set"] = selected
     keyboard = _build_account_keyboard(accounts, selected)
     text = (
-        f"🏦 请选择要投放的广告账户（多选）\n"
+        f"第 2 步：选择投放账户\n\n"
         f"共 {len(accounts)} 个，已选 {len(selected)} 个"
     )
     await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
@@ -229,12 +230,13 @@ async def _show_page_selection(update, ctx, edit_msg):
         name = p.get("name", "")
         marker = " ✓" if pid == default_page else ""
         keyboard.append([InlineKeyboardButton(
-            f"📄 {name[:30]}{marker}",
+            f"{name[:30]}{marker}",
             callback_data=f"go_page:{i}",
         )])
 
     await edit_msg.edit_text(
-        f"📄 请选择主页（所有选中账户共用）\n共 {len(pages)} 个",
+        f"第 3 步：选择主页\n\n"
+        f"当前共 {len(pages)} 个可用主页。",
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
     ctx.chat_data["go_pages_list"] = pages
@@ -275,12 +277,12 @@ async def _show_pixel_selection(update, ctx, edit_msg):
         name = px.get("name", "")
         marker = " ✓" if pxid == default_pixel else ""
         keyboard.append([InlineKeyboardButton(
-            f"📊 {name[:30]}{marker}",
+            f"{name[:30]}{marker}",
             callback_data=f"go_pixel:{i}",
         )])
 
     await edit_msg.edit_text(
-        f"📊 请选择像素（所有选中账户共用）",
+        "第 4 步：选择像素",
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
     ctx.chat_data["go_pixels_list"] = pixels
@@ -302,30 +304,48 @@ async def go_pixel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 # ══════════════════════════════════════════════════════════════════
 
 async def _finalize(update, ctx, edit_msg):
-    """收齐 token/accounts/page/pixel 后生成 upload task 并发链接"""
+    """收齐 token/accounts 后生成 upload task 并发链接
+
+    主页和像素在网页上按账户单独选择，附带名称和 ID。
+    """
     chat_id = update.effective_chat.id
     d = ctx.chat_data
 
     token = d.get("go_token", "")
     accounts = d.get("go_selected_accounts", [])
-    page_id = d.get("go_page_id", "")
-    pixel_id = d.get("go_pixel_id", "")
 
     if not token or not accounts:
-        await edit_msg.edit_text("❌ 缺少 token 或账户，流程中断。")
+        await edit_msg.edit_text("缺少 token 或账户，流程已中断。")
         return ConversationHandler.END
 
-    # 构造 upload_task 的 targets 数组（只有账户元数据，其他字段在网页填）
+    pool = get_chat_pool(chat_id)
+    last_used = pool.get("last_used", {})
+
+    # 按账户并发拉取各自真正可用的像素和主页（跨 BM 分配账户也能正确拿到）
+    acc_ids = [
+        acc.get("account_id") or acc.get("id", "").replace("act_", "")
+        for acc in accounts
+    ]
+    loop = asyncio.get_event_loop()
+    pixels_map, pages_map = await asyncio.gather(
+        loop.run_in_executor(None, fetch_pixels_for_accounts, token, acc_ids),
+        loop.run_in_executor(None, fetch_pages_for_accounts,  token, acc_ids),
+    )
+
+    # 构造 targets：账户元数据 + 各自可用的主页/像素，其他配置在网页填
     task_targets = []
     for acc in accounts:
         acc_id = acc.get("account_id") or acc.get("id", "").replace("act_", "")
         acc_name = acc.get("name", "") or f"Acct-{acc_id[-6:]}"
         task_targets.append({
-            "account_id": acc_id,
-            "account_name": acc_name,
-            "account_alias": acc_id[-6:],
-            "page_id": page_id,
-            "pixel_id": pixel_id,
+            "account_id":       acc_id,
+            "account_name":     acc_name,
+            "account_alias":    acc_id[-6:],
+            "campaign_name":    "",
+            "page_id":          last_used.get("page_id", ""),
+            "pixel_id":         last_used.get("pixel_id", ""),
+            "available_pages":  pages_map.get(acc_id, []),
+            "available_pixels": pixels_map.get(acc_id, []),
         })
 
     task_id = create_multi_upload_task(
@@ -334,31 +354,30 @@ async def _finalize(update, ctx, edit_msg):
         targets=task_targets,
     )
 
-    # 保存 last_used（只记会持续用到的：账户和 page/pixel）
     save_last_used(
         chat_id,
         account_ids=[t["account_id"] for t in task_targets],
-        page_id=page_id,
-        pixel_id=pixel_id,
+        page_id=last_used.get("page_id", ""),
+        pixel_id=last_used.get("pixel_id", ""),
     )
 
     host = os.getenv("DASHBOARD_HOST", "localhost:8080")
     upload_url = f"http://{host}/upload?task={task_id}"
 
-    summary = [
-        f"✅ 已就绪 {len(task_targets)} 个账户",
-        "",
-    ]
+    summary = [f"批量投放页面已生成", f"账户数：{len(task_targets)}", ""]
     for t in task_targets:
-        summary.append(f"  • {t['account_name']} ({t['account_alias']})")
+        n_px = len(t["available_pixels"])
+        n_pg = len(t["available_pages"])
+        summary.append(
+            f"• {t['account_name']} · {t['account_id'][-6:]} · {n_pg} 主页 / {n_px} 像素"
+        )
     summary += [
         "",
-        "其他所有配置（事件/URL/定向/预算/文案 等）都在网页上填。",
-        "填完并传完素材后点「一键创建 + 发布」。",
+        "下一步：打开网页，完成主页/像素、预算、定向、素材和发布。",
     ]
 
     keyboard = InlineKeyboardMarkup([[
-        InlineKeyboardButton("📎 打开批量投放页面", url=upload_url),
+        InlineKeyboardButton("打开投放页面", url=upload_url),
     ]])
     await edit_msg.edit_text("\n".join(summary), reply_markup=keyboard)
     return ConversationHandler.END
@@ -370,5 +389,5 @@ async def go_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         if k.startswith("go_"):
             ctx.chat_data.pop(k, None)
     if update.message:
-        await update.message.reply_text("已取消 /go 流程")
+        await update.message.reply_text("批量投放流程已取消。")
     return ConversationHandler.END

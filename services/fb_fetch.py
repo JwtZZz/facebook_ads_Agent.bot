@@ -103,6 +103,36 @@ def fetch_pages(token: str, account_id: str) -> list[dict]:
     return []
 
 
+def fetch_pixels_for_accounts(token: str, account_ids: list[str]) -> dict[str, list[dict]]:
+    """并发拉取多个广告账户各自可用的像素，返回 {account_id: [pixels]}"""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    result: dict[str, list[dict]] = {aid: [] for aid in account_ids}
+    with ThreadPoolExecutor(max_workers=min(len(account_ids), 10)) as pool:
+        futures = {pool.submit(fetch_pixels, token, aid): aid for aid in account_ids}
+        for fut in as_completed(futures):
+            aid = futures[fut]
+            try:
+                result[aid] = fut.result()
+            except Exception as e:
+                logger.warning(f"并发拉取像素失败 [{aid}]: {e}")
+    return result
+
+
+def fetch_pages_for_accounts(token: str, account_ids: list[str]) -> dict[str, list[dict]]:
+    """并发拉取多个广告账户各自可用的主页，返回 {account_id: [pages]}"""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    result: dict[str, list[dict]] = {aid: [] for aid in account_ids}
+    with ThreadPoolExecutor(max_workers=min(len(account_ids), 10)) as pool:
+        futures = {pool.submit(fetch_pages, token, aid): aid for aid in account_ids}
+        for fut in as_completed(futures):
+            aid = futures[fut]
+            try:
+                result[aid] = fut.result()
+            except Exception as e:
+                logger.warning(f"并发拉取主页失败 [{aid}]: {e}")
+    return result
+
+
 def fetch_bm_all(token: str) -> tuple[list[dict], list[dict], list[dict]]:
     """一次性拉取 BM 的全部 accounts/pages/pixels
 

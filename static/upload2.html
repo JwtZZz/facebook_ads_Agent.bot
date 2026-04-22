@@ -625,28 +625,37 @@ const EVENTS = [
   { value: 'SUBSCRIBE', label: '订阅' },
   { value: 'PURCHASE', label: 'PWA' },
 ];
-const COUNTRIES = ['BR','US','IN','PH','MX','ID','VN','TH','CO','AR','PE','CL'];
-// 两位 ISO 国家代码 → 🇧🇷 / 🇺🇸 国旗 emoji（两个 regional indicator 组成）
-function flagFor(code) {
-  if (!code || code.length !== 2) return '';
-  const base = 0x1F1E6;
-  return String.fromCodePoint(
-    base + code.charCodeAt(0) - 65,
-    base + code.charCodeAt(1) - 65,
-  );
-}
+const COUNTRIES = ['BR','US','IN','PH','MX','ID','VN','TH','CO','AR','PE','CL',
+                   'NG','EG','KE','ZA','PK','BD','MY','SG'];
+const COUNTRY_NAMES = {
+  BR:'巴西', US:'美国', IN:'印度', PH:'菲律宾', MX:'墨西哥',
+  ID:'印尼', VN:'越南', TH:'泰国', CO:'哥伦比亚', AR:'阿根廷',
+  PE:'秘鲁', CL:'智利', NG:'尼日利亚', EG:'埃及', KE:'肯尼亚',
+  ZA:'南非', PK:'巴基斯坦', BD:'孟加拉', MY:'马来西亚', SG:'新加坡',
+};
 const DEVICES = ['Android', 'iOS', 'All'];
 const GENDERS = [
   { value: 0, label: '全部' },
   { value: 1, label: '男' },
   { value: 2, label: '女' },
 ];
+const AGE_PRESETS = [
+  { label: '18-65（默认）', min: 18, max: 65 },
+  { label: '18-45', min: 18, max: 45 },
+  { label: '18-35', min: 18, max: 35 },
+  { label: '25-65', min: 25, max: 65 },
+  { label: '25-55', min: 25, max: 55 },
+  { label: '25-45', min: 25, max: 45 },
+  { label: '35-65', min: 35, max: 65 },
+];
 
 // 每账户字段列表（决定 sync 范围）
+// title / campaign_name / page_id / pixel_id 不跨账户同步
 const PER_ACCOUNT_FIELDS = [
   'event', 'landing_url', 'country', 'device', 'gender',
-  'age_min', 'age_max', 'budget', 'title', 'text',
+  'age_min', 'age_max', 'budget',
 ];
+const UPLOAD_CONCURRENCY = 4;
 
 // ══════════════════════════════════════════════════════════════════
 // 工具
@@ -672,6 +681,24 @@ function sortFiles(files) {
 
 function toggleSection(id) {
   document.getElementById(id).classList.toggle('collapsed');
+}
+
+async function parseApiResponse(resp) {
+  const text = await resp.text();
+  let data = {};
+
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      throw new Error(`HTTP ${resp.status}: ${text.slice(0, 120) || 'Invalid response'}`);
+    }
+  }
+
+  if (!resp.ok) {
+    throw new Error(data.error || `HTTP ${resp.status}`);
+  }
+  return data;
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -700,7 +727,7 @@ class UploadPool {
     }
   }
 }
-const uploadPool = new UploadPool(6);
+const uploadPool = new UploadPool(UPLOAD_CONCURRENCY);
 
 // ══════════════════════════════════════════════════════════════════
 // 加载任务信息
@@ -740,18 +767,20 @@ async function loadTask() {
   // 初始化每账户的字段（从后端拿到的或者默认值）
   for (const t of taskInfo.targets) {
     state.accountFields[t.account_id] = {
-      event:        t.event || 'SUBSCRIBE',
-      landing_url:  t.landing_url || '',
-      country:      t.country || 'BR',
-      device:       t.device || 'Android',
-      gender:       typeof t.gender === 'number' ? t.gender : 0,
-      age_min:      t.age_min || 18,
-      age_max:      t.age_max || 45,
-      budget:       t.budget || 20,
-      title:        t.title || '',
-      text:         t.text || '',
-      // 哪些字段已被用户手动编辑过（不被 sync 覆盖）
-      edited:       new Set(),
+      event:         t.event || 'SUBSCRIBE',
+      landing_url:   t.landing_url || '',
+      country:       t.country || 'BR',
+      device:        t.device || 'Android',
+      gender:        typeof t.gender === 'number' ? t.gender : 0,
+      age_min:       t.age_min || 18,
+      age_max:       t.age_max || 65,
+      budget:        t.budget || 20,
+      title:         t.title || '',
+      text:          t.text || '',
+      campaign_name: t.campaign_name || '',
+      page_id:       t.page_id || '',
+      pixel_id:      t.pixel_id || '',
+      edited:        new Set(),
     };
     // 后端已有值的字段标记为 edited，避免首次 sync 覆盖
     for (const f of PER_ACCOUNT_FIELDS) {
@@ -851,21 +880,51 @@ function configCardHTML(t) {
   const eventOptions = EVENTS.map(e =>
     `<option value="${e.value}" ${f.event === e.value ? 'selected' : ''}>${e.label}</option>`
   ).join('');
+
   const countryOptions = COUNTRIES.map(c =>
-    `<option value="${c}" ${f.country === c ? 'selected' : ''}>${flagFor(c)} ${c}</option>`
+    `<option value="${c}" ${f.country === c ? 'selected' : ''}>${c} ${COUNTRY_NAMES[c] || ''}</option>`
   ).join('');
+
   const deviceOptions = DEVICES.map(d =>
     `<option value="${d}" ${f.device === d ? 'selected' : ''}>${d}</option>`
   ).join('');
+
   const genderOptions = GENDERS.map(g =>
     `<option value="${g.value}" ${f.gender === g.value ? 'selected' : ''}>${g.label}</option>`
   ).join('');
+
+  const agePresetIdx = AGE_PRESETS.findIndex(p => p.min === f.age_min && p.max === f.age_max);
+  const ageOptions = AGE_PRESETS.map((p, i) =>
+    `<option value="${i}" ${i === agePresetIdx ? 'selected' : ''}>${p.label}</option>`
+  ).join('');
+
+  const availPages = t.available_pages || [];
+  const pageOptions = availPages.length === 0
+    ? `<option value="${esc(f.page_id)}">${f.page_id ? esc(f.page_id) + ' (ID)' : '— 无主页 —'}</option>`
+    : `<option value="">— 请选择 —</option>` + availPages.map(p =>
+        `<option value="${p.id}" ${f.page_id === p.id ? 'selected' : ''}>${esc(p.name)} (${p.id})</option>`
+      ).join('');
+
+  const availPixels = t.available_pixels || [];
+  const pixelOptions = availPixels.length === 0
+    ? `<option value="${esc(f.pixel_id)}">${f.pixel_id ? esc(f.pixel_id) + ' (ID)' : '— 无像素 —'}</option>`
+    : `<option value="">— 请选择 —</option>` + availPixels.map(p =>
+        `<option value="${p.id}" ${f.pixel_id === p.id ? 'selected' : ''}>${esc(p.name)} (${p.id})</option>`
+      ).join('');
 
   return `
       <div class="card-head">
         <h4>${esc(t.account_name || aid)}</h4>
         <span class="alias">${esc(t.account_alias || '')}</span>
-        <span class="id">📄 ${esc(t.page_id || '-')} · 📊 ${esc(t.pixel_id || '-')}</span>
+        <span class="id">act_${esc(aid)}</span>
+      </div>
+
+      <div class="card-row">
+        <div class="field">
+          <label>系列名称</label>
+          <input type="text" id="campaign_name_${aid}" value="${esc(f.campaign_name)}"
+                 placeholder="留空则用基础名-账户号" oninput="onFieldChange('${aid}','campaign_name')">
+        </div>
       </div>
 
       <div class="card-row">
@@ -877,8 +936,22 @@ function configCardHTML(t) {
 
       <div class="card-row">
         <div class="field">
-          <label>落地页 URL</label>
-          <input type="text" id="landing_url_${aid}" value="${esc(f.landing_url)}"
+          <label>公共主页</label>
+          <select id="page_id_${aid}" onchange="onFieldChange('${aid}','page_id')">${pageOptions}</select>
+        </div>
+      </div>
+
+      <div class="card-row">
+        <div class="field">
+          <label>像素</label>
+          <select id="pixel_id_${aid}" onchange="onFieldChange('${aid}','pixel_id')">${pixelOptions}</select>
+        </div>
+      </div>
+
+      <div class="card-row">
+        <div class="field">
+          <label>URL</label>
+          <input type="url" id="landing_url_${aid}" value="${esc(f.landing_url)}"
                  placeholder="https://..." oninput="onFieldChange('${aid}','landing_url')">
         </div>
       </div>
@@ -901,19 +974,13 @@ function configCardHTML(t) {
         </div>
         <div class="field">
           <label>年龄</label>
-          <div class="age-range">
-            <input type="number" id="age_min_${aid}" min="13" max="65" value="${f.age_min}"
-                   oninput="onFieldChange('${aid}','age_min')">
-            <span>-</span>
-            <input type="number" id="age_max_${aid}" min="13" max="65" value="${f.age_max}"
-                   oninput="onFieldChange('${aid}','age_max')">
-          </div>
+          <select id="age_preset_${aid}" onchange="onAgePresetChange('${aid}', this.value)">${ageOptions}</select>
         </div>
       </div>
 
       <div class="card-row">
         <div class="field">
-          <label>单账户日预算 ($)</label>
+          <label>日预算 ($)</label>
           <input type="number" id="budget_${aid}" min="1" step="1" value="${f.budget}"
                  oninput="onFieldChange('${aid}','budget')">
         </div>
@@ -936,7 +1003,7 @@ function configCardHTML(t) {
       </div>
 
       <div class="synced-hint" id="syncHint_${aid}" style="display:none">
-        🔄 跟随其他账户同步
+      
       </div>
   `;
 }
@@ -1038,21 +1105,44 @@ function onFieldChange(accountId, field) {
   f[field] = v;
   f.edited.add(field);
 
-  // 同步到其他账户（仅同步 PER_ACCOUNT_FIELDS 中的字段，跳过已 edited 的目标）
-  for (const t of taskInfo.targets) {
-    if (t.account_id === accountId) continue;
-    const dst = state.accountFields[t.account_id];
-    if (dst.edited.has(field)) continue;
-    dst[field] = v;
-    const dstEl = document.getElementById(`${field}_${t.account_id}`);
-    if (dstEl) {
-      if (dstEl.tagName === 'SELECT') dstEl.value = v;
-      else dstEl.value = v;
+  // 仅同步 PER_ACCOUNT_FIELDS 中的字段（title/campaign_name/page_id/pixel_id 不跨账户同步）
+  if (PER_ACCOUNT_FIELDS.includes(field)) {
+    for (const t of taskInfo.targets) {
+      if (t.account_id === accountId) continue;
+      const dst = state.accountFields[t.account_id];
+      if (dst.edited.has(field)) continue;
+      dst[field] = v;
+      const dstEl = document.getElementById(`${field}_${t.account_id}`);
+      if (dstEl) {
+        if (dstEl.tagName === 'SELECT') dstEl.value = v;
+        else dstEl.value = v;
+      }
     }
   }
   updateSyncHints();
+  scheduleSaveConfig();
+}
 
-  // debounce 保存
+function onAgePresetChange(accountId, idxStr) {
+  const idx = parseInt(idxStr, 10);
+  const preset = AGE_PRESETS[idx];
+  if (!preset) return;
+  const f = state.accountFields[accountId];
+  f.age_min = preset.min;
+  f.age_max = preset.max;
+  f.edited.add('age_min');
+  f.edited.add('age_max');
+  // 同步年龄到其他未编辑过年龄的账户
+  for (const t of taskInfo.targets) {
+    if (t.account_id === accountId) continue;
+    const dst = state.accountFields[t.account_id];
+    if (dst.edited.has('age_min') || dst.edited.has('age_max')) continue;
+    dst.age_min = preset.min;
+    dst.age_max = preset.max;
+    const dstEl = document.getElementById(`age_preset_${t.account_id}`);
+    if (dstEl) dstEl.value = idx;
+  }
+  updateSyncHints();
   scheduleSaveConfig();
 }
 
@@ -1145,6 +1235,9 @@ async function saveConfigToServer() {
       const f = state.accountFields[t.account_id];
       return {
         account_id: t.account_id,
+        campaign_name: f.campaign_name,
+        page_id: f.page_id,
+        pixel_id: f.pixel_id,
         event: f.event,
         landing_url: f.landing_url,
         country: f.country,
@@ -1304,7 +1397,7 @@ async function uploadCell(slotIdx, accountId, file) {
       `/upload/file?task=${taskId}&slot=${slotIdx}&account=${accountId}`,
       { method: 'POST', body: fd }
     );
-    const data = await r.json();
+    const data = await parseApiResponse(r);
     if (data.ok) {
       setCellStatus(slotIdx, accountId, 'done');
     } else {
@@ -1321,7 +1414,7 @@ async function clearCell(slotIdx, accountId) {
       `/upload/clear?task=${taskId}&slot=${slotIdx}&account=${accountId}`,
       { method: 'POST' }
     );
-    const data = await r.json();
+    const data = await parseApiResponse(r);
     if (data.ok) {
       const key = cellKey(slotIdx, accountId);
       if (state.cellPreviews[key]) {
@@ -1362,7 +1455,7 @@ async function publish() {
 
   try {
     const r = await fetch('/upload/publish?task=' + taskId, { method: 'POST' });
-    const data = await r.json();
+    const data = await parseApiResponse(r);
 
     const results = data.results || [];
     const okCount = results.filter(r => r.ok).length;

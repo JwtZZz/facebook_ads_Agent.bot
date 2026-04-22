@@ -158,12 +158,48 @@ class FBClient:
 
     # ── 素材 ────────────────────────────────────────────────────
     def upload_video(self, video_path: str, title: str = "") -> str:
-        with open(video_path, "rb") as f:
-            return self._req(
-                "POST", f"{self.cfg.account}/advideos",
-                body={"title": title or video_path},
-                files={"source": f},
-            )["id"]
+        """使用 FB 分块可续传 API 上传视频（3 阶段：start → transfer → finish）"""
+        import os
+        file_size = os.path.getsize(video_path)
+
+        # 阶段 1：开启上传会话
+        start = self._req("POST", f"{self.cfg.account}/advideos", body={
+            "upload_phase": "start",
+            "file_size": file_size,
+        })
+        session_id = start["upload_session_id"]
+        start_off  = int(start["start_offset"])
+        end_off    = int(start["end_offset"])
+        video_id   = start["video_id"]
+
+        # 阶段 2：逐块上传（FB 返回的 end_offset 决定块大小）
+        with open(video_path, "rb") as fh:
+            while start_off < file_size:
+                fh.seek(start_off)
+                chunk = fh.read(end_off - start_off)
+                resp = self._req(
+                    "POST", f"{self.cfg.account}/advideos",
+                    body={
+                        "upload_phase":      "transfer",
+                        "start_offset":      start_off,
+                        "upload_session_id": session_id,
+                    },
+                    files={"video_file_chunk": ("chunk", chunk, "application/octet-stream")},
+                )
+                new_start = int(resp.get("start_offset", end_off))
+                new_end   = int(resp.get("end_offset", file_size))
+                if new_start == start_off:
+                    break  # 无进展，停止
+                start_off = new_start
+                end_off   = min(new_end, file_size)
+
+        # 阶段 3：完成
+        self._req("POST", f"{self.cfg.account}/advideos", body={
+            "upload_phase":      "finish",
+            "upload_session_id": session_id,
+            "title": title or os.path.basename(video_path),
+        })
+        return video_id
 
     def upload_image(self, image_path: str) -> str:
         """上传图片，返回 image_hash"""
@@ -178,22 +214,43 @@ class FBClient:
                 return v.get("hash", "")
             raise FBError("图片上传返回数据异常")
 
+    def get_video_thumbnail(self, video_id: str, retries: int = 5, interval: int = 3) -> str:
+        """获取视频封面 URL，带重试（FB 处理视频需要几秒）"""
+        import time
+        for _ in range(retries):
+            try:
+                data = self._req("GET", video_id, params={"fields": "picture"})
+                url = data.get("picture", "")
+                if url:
+                    return url
+            except Exception:
+                pass
+            time.sleep(interval)
+        return ""
+
     def create_video_creative(self, name: str, video_id: str,
                               landing_url: str, message: str = "",
-                              title: str = "", cta: str = "SUBSCRIBE") -> str:
+                              title: str = "", cta: str = "SUBSCRIBE",
+                              thumbnail_url: str = "") -> str:
+        # FB 现在强制要求 video_data 里有缩略图，否则报 1443226
+        if not thumbnail_url:
+            thumbnail_url = self.get_video_thumbnail(video_id)
+        video_data: dict = {
+            "video_id": video_id,
+            "message": message,
+            "title": title,
+            "call_to_action": {
+                "type": cta,
+                "value": {"link": landing_url},
+            },
+        }
+        if thumbnail_url:
+            video_data["image_url"] = thumbnail_url
         body = {
             "name": name,
             "object_story_spec": {
                 "page_id": self.cfg.page_id,
-                "video_data": {
-                    "video_id": video_id,
-                    "message": message,
-                    "title": title,
-                    "call_to_action": {
-                        "type": cta,
-                        "value": {"link": landing_url},
-                    },
-                },
+                "video_data": video_data,
             },
         }
         return self._req("POST", f"{self.cfg.account}/adcreatives", body=body)["id"]
