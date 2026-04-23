@@ -1,0 +1,3402 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>批量上传素材 · 多账户</title>
+<style>
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=Manrope:wght@400;500;600;700&display=swap");
+
+:root {
+  --acc-col-width: 180px;
+  --left-col-width: 200px;
+  --font-display: 'Fraunces', 'Noto Serif SC', Georgia, serif;
+  --font-ui: 'Manrope', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --canvas: #f5f4ed;
+  --surface: #faf9f5;
+  --surface-strong: #ffffff;
+  --surface-soft: #ebe7da;
+  --ink: #141413;
+  --ink-soft: #4d4c48;
+  --text-muted: #5e5d59;
+  --text-faint: #87867f;
+  --text-on-dark: #b0aea5;
+  --border: #e8e6dc;
+  --border-light: #f0eee6;
+  --border-dark: #30302e;
+  --brand: #c96442;
+  --brand-soft: #d97757;
+  --success: #476944;
+  --warning: #9d6c33;
+  --danger: #b53333;
+  --focus: #3898ec;
+  --radius-xs: 12px;
+  --radius-sm: 18px;
+  --radius: 24px;
+  --radius-lg: 32px;
+  --ring: 0 0 0 1px rgba(77, 76, 72, 0.08);
+  --shadow: 0 18px 40px rgba(20, 20, 19, 0.08);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html { scrollbar-gutter: stable; }
+
+body {
+  min-height: 100vh;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.6;
+  padding: 18px 20px 120px;
+}
+
+body,
+button,
+input,
+select,
+textarea {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+h1,
+.result h3,
+.config-card .card-head h4 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  font-family: var(--font-ui);
+}
+
+button {
+  border: none;
+  background: none;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  padding: 11px 14px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface-strong);
+  color: var(--ink);
+  outline: none;
+  transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+  box-shadow: 0 0 0 1px rgba(240, 238, 230, 0.3);
+}
+
+select,
+option {
+  font-family: var(--font-ui);
+}
+
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 42px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235e5d59' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 14px;
+}
+
+select:open {
+  border-radius: 18px;
+}
+
+@supports selector(::picker(select)) {
+  select,
+  ::picker(select) {
+    appearance: base-select;
+  }
+
+  select {
+    background-image: none;
+    padding-right: 18px;
+  }
+
+  ::picker-icon {
+    color: var(--text-faint);
+  }
+
+  ::picker(select) {
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    background: var(--surface-strong);
+    box-shadow: var(--ring), 0 18px 32px rgba(20, 20, 19, 0.12);
+    padding: 6px;
+  }
+
+  option {
+    border-radius: 12px;
+    padding: 10px 12px;
+    color: var(--ink);
+    background: var(--surface-strong);
+  }
+
+  option:checked {
+    background: rgba(201, 100, 66, 0.12);
+  }
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--focus);
+  box-shadow: 0 0 0 3px rgba(56, 152, 236, 0.12);
+}
+
+textarea {
+  min-height: 112px;
+  resize: vertical;
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.eyebrow::before {
+  content: '';
+  width: 18px;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.65;
+}
+
+.top-bar {
+  display: none;
+}
+
+.top-copy {
+  max-width: 820px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.top-copy .eyebrow {
+  color: var(--brand);
+}
+
+h1 {
+  font-size: clamp(2.2rem, 3.2vw, 3.2rem);
+  line-height: 1.12;
+  color: var(--ink);
+}
+
+.hero-note {
+  max-width: 720px;
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--text-muted);
+}
+
+.top-bar .info {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.top-side {
+  min-width: 240px;
+  max-width: 280px;
+  margin-left: auto;
+  padding: 6px 0 6px 18px;
+  border-left: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+}
+
+.top-side .eyebrow {
+  color: var(--text-faint);
+}
+
+#progressLabel {
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.progress-wrap {
+  width: 100%;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(77, 76, 72, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(232, 230, 220, 0.9);
+}
+
+.progress-bar {
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--brand);
+  box-shadow: 0 0 0 1px rgba(217, 119, 87, 0.15);
+  transition: width .3s ease;
+}
+
+.page-body {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}
+
+.page-intro {
+  display: none;
+}
+
+.page-intro .eyebrow {
+  color: var(--brand);
+  margin-bottom: 8px;
+}
+
+.page-intro p {
+  font-size: 17px;
+  line-height: 1.75;
+}
+
+.global-bar,
+.account-column,
+.result {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--ring), var(--shadow);
+}
+
+.global-bar {
+  display: none;
+  align-items: flex-end;
+  gap: 16px;
+  padding: 20px 22px;
+  border-radius: var(--radius);
+  margin-bottom: 22px;
+  flex-wrap: wrap;
+}
+
+.global-bar .field {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 180px;
+  color: var(--text-muted);
+}
+
+.global-bar label,
+.card-row .field label {
+  font-size: 11px;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.global-bar input[type="number"] {
+  width: 96px;
+  text-align: center;
+}
+
+.global-bar input.base-name {
+  width: min(100%, 320px);
+}
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+  color: var(--ink-soft);
+  box-shadow: 0 0 0 1px rgba(77, 76, 72, 0.04);
+  cursor: pointer;
+  transition: transform .18s ease, background .18s ease, color .18s ease;
+}
+
+.btn-ghost:hover {
+  background: var(--surface-strong);
+  color: var(--ink);
+  transform: translateY(-1px);
+}
+
+.config-stack {
+  display: grid;
+  grid-template-columns: repeat(var(--acc-count, 1), minmax(320px, 360px));
+  justify-content: start;
+  gap: 24px;
+  overflow-x: auto;
+}
+
+.columns-container {
+  display: grid;
+  grid-template-columns: repeat(var(--acc-count, 1), minmax(320px, 360px));
+  justify-content: start;
+  gap: 24px;
+  overflow-x: auto;
+  padding-bottom: 12px;
+  width: 100%;
+}
+
+.top-scroll-shell {
+  position: sticky;
+  top: 8px;
+  z-index: 12;
+  margin: 0 0 10px;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(250, 249, 245, 0.9);
+  box-shadow: 0 10px 24px rgba(20, 20, 19, 0.06);
+  backdrop-filter: blur(10px);
+}
+
+.top-scroll-track {
+  overflow-x: auto;
+  overflow-y: hidden;
+  height: 8px;
+}
+
+.top-scroll-spacer {
+  height: 1px;
+}
+
+.top-scroll-track::-webkit-scrollbar,
+.columns-container::-webkit-scrollbar,
+.table-wrap::-webkit-scrollbar {
+  height: 8px;
+}
+
+.top-scroll-track::-webkit-scrollbar-thumb,
+.columns-container::-webkit-scrollbar-thumb,
+.table-wrap::-webkit-scrollbar-thumb {
+  background: #d0c8b9;
+  border-radius: 999px;
+}
+
+.top-scroll-track::-webkit-scrollbar-track,
+.columns-container::-webkit-scrollbar-track,
+.table-wrap::-webkit-scrollbar-track {
+  background: rgba(232, 230, 220, 0.65);
+  border-radius: 999px;
+}
+
+.account-column {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  padding: 18px;
+  border-radius: 30px;
+}
+
+.col-drop-zone,
+.config-card,
+.slot-item {
+  background: var(--surface-strong);
+  border: 1px solid var(--border-light);
+}
+
+.col-drop-zone {
+  padding: 26px 16px;
+  border-radius: 22px;
+  border-style: dashed;
+  text-align: center;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: border-color .18s ease, transform .18s ease, background .18s ease, color .18s ease;
+}
+
+.col-drop-zone:hover,
+.col-drop-zone.dragover {
+  border-color: var(--brand);
+  background: #fffaf7;
+  color: var(--ink);
+  transform: translateY(-1px);
+}
+
+.col-drop-zone .icon {
+  font-size: 22px;
+  color: var(--brand);
+  margin-bottom: 6px;
+}
+
+.col-drop-zone .sub {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.config-card {
+  padding: 20px;
+  border-radius: 24px;
+}
+
+.config-card .card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.card-head-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.section-kicker {
+  display: inline-block;
+  margin-bottom: 7px;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--brand);
+}
+
+.config-card .card-head h4 {
+  font-size: 17px;
+  line-height: 1.25;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: normal;
+}
+
+.config-card .card-head .alias {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.config-card .card-head .id {
+  flex-shrink: 0;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-family: var(--font-ui);
+  font-size: 11px;
+}
+
+.card-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.card-row.row-2 {
+  grid-template-columns: 1fr 1fr;
+}
+
+.card-row .field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.card-row .field-note {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-faint);
+}
+
+.synced-hint {
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px dashed rgba(201, 100, 66, 0.28);
+  background: rgba(201, 100, 66, 0.07);
+  color: var(--brand);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.slots-list-header {
+  padding: 2px 4px 8px;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.slots-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.slot-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 76px;
+  padding: 12px;
+  border-radius: 22px;
+  font-size: 12px;
+  color: var(--text-muted);
+  transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease, background .18s ease;
+}
+
+.slot-item:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 28px rgba(20, 20, 19, 0.05);
+}
+
+.slot-item.idle {
+  border-style: dashed;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.slot-item.queued {
+  background: #f6efe1;
+  border-color: rgba(157, 108, 51, 0.28);
+  color: var(--warning);
+}
+
+.slot-item.uploading {
+  background: #f5efe6;
+  border-color: rgba(217, 119, 87, 0.28);
+  color: var(--brand-soft);
+}
+
+.slot-item.done {
+  background: #f2f6ef;
+  border-color: rgba(71, 105, 68, 0.24);
+  color: var(--success);
+}
+
+.slot-item.failed {
+  background: #fbefef;
+  border-color: rgba(181, 51, 51, 0.24);
+  color: var(--danger);
+}
+
+.slot-item .slot-idx {
+  flex-shrink: 0;
+  min-width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.slot-item .preview {
+  width: 72px;
+  height: 52px;
+  border-radius: 14px;
+  object-fit: cover;
+  background: #20201e;
+  flex-shrink: 0;
+}
+
+.slot-item .info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.slot-item .info .name {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink);
+  word-break: break-word;
+}
+
+.slot-item .info .status {
+  font-size: 11px;
+  color: inherit;
+}
+
+.slot-item .slot-action {
+  flex-shrink: 0;
+}
+
+.slot-item .clear-cell-btn,
+.slot-item .retry-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform .18s ease, opacity .18s ease, background .18s ease;
+}
+
+.slot-item .clear-cell-btn {
+  background: rgba(20, 20, 19, 0.08);
+  color: var(--ink);
+}
+
+.slot-item .retry-btn {
+  background: rgba(181, 51, 51, 0.12);
+  color: var(--danger);
+}
+
+.slot-item .clear-cell-btn:hover,
+.slot-item .retry-btn:hover {
+  transform: translateY(-1px);
+}
+
+.bottom-bar {
+  width: 100%;
+  max-width: none;
+  margin: 28px 0 0;
+  padding: 18px 22px;
+  border: 1px solid var(--border-dark);
+  border-radius: 26px;
+  background: rgba(20, 20, 19, 0.96);
+  color: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+  position: sticky;
+  bottom: 18px;
+  box-shadow: 0 20px 40px rgba(20, 20, 19, 0.18);
+}
+
+.bottom-bar .controls {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.bottom-bar .meta-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 54px;
+  padding: 10px 12px 10px 16px;
+  border-radius: 18px;
+  background: rgba(250, 249, 245, 0.08);
+  border: 1px solid rgba(176, 174, 165, 0.18);
+}
+
+.bottom-bar .meta-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.bottom-bar .meta-copy label {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(176, 174, 165, 0.82);
+}
+
+.bottom-bar .meta-copy span {
+  font-size: 14px;
+  line-height: 1.2;
+  color: var(--surface);
+}
+
+.bottom-bar .meta-pill input {
+  width: 88px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(176, 174, 165, 0.24);
+  background: rgba(250, 249, 245, 0.1);
+  color: var(--surface);
+  box-shadow: none;
+}
+
+.bottom-bar .meta-pill input:focus {
+  border-color: rgba(217, 119, 87, 0.72);
+  box-shadow: 0 0 0 3px rgba(217, 119, 87, 0.12);
+}
+
+.bottom-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,.08);
+  background: rgba(255,255,255,.03);
+  color: #f5f3eb;
+  min-height: 58px;
+  transition: border-color .18s ease, background .18s ease, box-shadow .18s ease;
+}
+
+.bottom-toggle .meta-copy {
+  min-width: 0;
+}
+
+.switch {
+  position: relative;
+  width: 48px;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.switch-slider {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: rgba(255,255,255,.14);
+  transition: background .18s ease;
+}
+
+.switch-slider::before {
+  content: '';
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  left: 4px;
+  top: 4px;
+  border-radius: 50%;
+  background: #f6f4ec;
+  transition: transform .18s ease;
+}
+
+.switch input:checked + .switch-slider {
+  background: rgba(201, 100, 66, .82);
+}
+
+.switch input:checked + .switch-slider::before {
+  transform: translateX(20px);
+}
+
+.bottom-toggle.active {
+  border-color: rgba(201, 100, 66, .38);
+  background: rgba(201, 100, 66, .12);
+  box-shadow: 0 0 0 1px rgba(201, 100, 66, .12);
+}
+
+.publish-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 22px;
+  border-radius: 16px;
+  background: var(--brand);
+  color: var(--surface);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  box-shadow: 0 0 0 1px rgba(201, 100, 66, 0.25);
+  transition: transform .18s ease, background .18s ease, box-shadow .18s ease;
+}
+
+.publish-btn:hover:not(:disabled) {
+  background: var(--brand-soft);
+  transform: translateY(-1px);
+}
+
+.publish-btn:disabled {
+  background: rgba(176, 174, 165, 0.18);
+  color: rgba(250, 249, 245, 0.48);
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.status-msg {
+  flex: 1;
+  min-width: 220px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-on-dark);
+}
+
+.status-msg.error   { color: #f0bbbb; }
+.status-msg.success { color: #cfe5ca; }
+
+.result {
+  display: none;
+  width: 100%;
+  max-width: none;
+  margin: 22px 0 0;
+  padding: 24px;
+  border-radius: 28px;
+}
+
+.result.show { display: block; }
+
+.result h3 {
+  font-size: clamp(2rem, 3vw, 2.5rem);
+  line-height: 1.12;
+  color: var(--ink);
+  margin-bottom: 14px;
+}
+
+.result-item {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.result-item:last-child { border-bottom: none; }
+.result-item.failed { color: var(--danger); }
+.result-item.ok     { color: var(--success); }
+
+.naming-panel {
+  display: none;
+}
+
+.naming-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.naming-head h3 {
+  font-family: var(--font-display);
+  font-size: clamp(1.8rem, 2.8vw, 2.4rem);
+  line-height: 1.08;
+  color: var(--ink);
+}
+
+.naming-head p {
+  max-width: 760px;
+  margin-top: 10px;
+  color: var(--text-muted);
+}
+
+.naming-grid {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: minmax(240px, 360px) 1fr;
+  gap: 14px;
+  align-items: end;
+}
+
+.naming-hint {
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px dashed rgba(201, 100, 66, 0.26);
+  background: rgba(201, 100, 66, 0.08);
+  color: var(--brand);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.name-example-list {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+}
+
+.name-example {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 22px;
+  background: var(--surface-strong);
+  border: 1px solid var(--border-light);
+}
+
+.name-example .meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.name-example .label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.name-example .value {
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ink);
+  word-break: break-word;
+}
+
+.copy-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 12px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--ink-soft);
+  transition: transform .18s ease, background .18s ease;
+}
+
+.copy-btn:hover {
+  background: var(--surface-soft);
+  transform: translateY(-1px);
+}
+
+@media (max-width: 900px) {
+  body { padding: 12px 14px 110px; }
+  .top-bar {
+    position: static;
+    padding: 20px 22px;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .top-side {
+    max-width: none;
+    width: 100%;
+    padding: 10px 0 0;
+    border-left: 0;
+    border-top: 1px solid var(--border);
+  }
+  .page-intro p {
+    font-size: 16px;
+  }
+  .global-bar {
+    padding: 18px;
+  }
+  .columns-container {
+    grid-template-columns: repeat(var(--acc-count, 1), minmax(300px, 1fr));
+    gap: 18px;
+  }
+  .bottom-bar {
+    justify-content: flex-start;
+  }
+  .bottom-bar .controls,
+  .bottom-bar .meta-pill {
+    width: 100%;
+  }
+  .naming-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  h1 { font-size: 2rem; }
+  .card-row.row-2 {
+    grid-template-columns: 1fr;
+  }
+  .global-bar .field {
+    width: 100%;
+  }
+  .global-bar input.base-name,
+  .global-bar input[type="number"] {
+    width: 100%;
+  }
+  .bottom-bar {
+    padding: 16px 18px;
+  }
+  .bottom-bar .meta-pill {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .bottom-bar .meta-pill input {
+    width: 100%;
+  }
+  .publish-btn {
+    width: 100%;
+  }
+}
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <div class="top-copy">
+    <div class="eyebrow"></div>
+    <h1>批量上传素材</h1>
+    <p class="hero-note">沿用现有投放逻辑，把账户配置、素材上架与发布动作整理成一张更温和、更像编辑台的工作界面。</p>
+    <div class="info" id="taskInfo">加载中...</div>
+  </div>
+  <div class="top-side">
+    <div class="eyebrow">Publish Progress</div>
+    <div id="progressLabel">总进度 0 / 0</div>
+    <div class="progress-wrap"><div class="progress-bar" id="totalProgress"></div></div>
+  </div>
+</div>
+
+<div class="page-body">
+
+<div class="page-intro">
+  <div class="eyebrow">Editorial Setup</div>
+  <p>先设定系列基名与每账户广告数，再按账户整理页面、像素、预算、文案与素材。所有交互逻辑保持原样，只重新组织视觉层次。</p>
+</div>
+
+<div class="global-bar">
+  <span class="field">
+    <label>系列基础名</label>
+    <input type="text" class="base-name" id="baseNameInput"
+           placeholder="bet7-778-DT-0416" oninput="onGlobalChange('base_name')">
+  </span>
+  <span class="field">
+    <label>每账户广告数</label>
+    <input type="number" id="countInput" min="1" max="50" value="10"
+           oninput="onGlobalChange('count')">
+  </span>
+</div>
+
+<div class="top-scroll-shell" id="topScrollShell" style="display:none">
+  <div class="top-scroll-track" id="topScrollTrack">
+    <div class="top-scroll-spacer" id="topScrollSpacer"></div>
+  </div>
+</div>
+
+<div class="columns-container" id="columnsContainer"></div>
+
+</div><!-- /.page-body -->
+
+<div class="bottom-bar">
+  <div class="controls">
+    <div class="meta-pill">
+      <div class="meta-copy">
+        <label></label>
+        <span>每个账户广告数量</span>
+      </div>
+      <input type="text" inputmode="numeric" pattern="[0-9]*" id="bottomCountInput" value="10"
+             oninput="onGlobalChange('count')">
+    </div>
+    <div class="bottom-toggle">
+      <div class="meta-copy">
+        <label></label>
+        <span id="syncToggleText">关闭时各系列独立，打开后同步更新</span>
+      </div>
+      <label class="switch" title="打开后，修改一个系列的配置会同步到其他系列">
+        <input type="checkbox" id="syncToggle" onchange="onSyncToggleChange()">
+        <span class="switch-slider"></span>
+      </label>
+    </div>
+  </div>
+  <span class="status-msg" id="statusMsg"></span>
+  <button class="publish-btn" id="publishBtn" onclick="publish()" disabled>一键创建 + 发布</button>
+</div>
+
+<div class="naming-panel" id="namingPanel">
+  <div class="naming-head">
+    <div>
+      <div class="eyebrow">Naming Examples</div>
+      <h3>系列命名示例</h3>
+      <p>输入命名前缀后，系统会自动补上当天日期和 A / B / C 后缀。留空时会按默认模板生成。</p>
+    </div>
+  </div>
+
+  <div class="naming-grid">
+    <div class="field">
+      <label>命名前缀</label>
+      <input type="text" id="namingBaseInput" placeholder="投手-渠道号-产品" oninput="onNamingBaseInput()">
+    </div>
+    <div class="naming-hint" id="namingHint">自动格式：投手-渠道号-产品-0417-A</div>
+  </div>
+
+  <div class="name-example-list" id="nameExampleList"></div>
+</div>
+
+<div class="result" id="resultBox">
+  <h3>发布完成</h3>
+  <div id="resultList"></div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════════
+// 全局状态
+// ══════════════════════════════════════════════════════════════════
+const taskId = new URLSearchParams(location.search).get('task');
+document.getElementById('namingPanel')?.remove();
+if (!taskId) {
+  document.body.innerHTML = '<div style="text-align:center;padding:60px;color:#999;">链接无效</div>';
+}
+
+let taskInfo = null;       // 来自 /upload/info
+const state = {
+  // 每 cell (slot × account) 的文件和预览（新结构，2D）
+  cellFiles: {},            // {"slotIdx/accountId": File}
+  cellPreviews: {},         // {"slotIdx/accountId": blob URL}
+  cells: {},                // {"slotIdx/accountId": {status, filename, error, progress}}
+  uploadTokens: {},         // {"slotIdx/accountId": number}
+  accountFields: {},        // {accountId: {event, url, country, device, ..., edited: Set}}
+  baseName: '',
+  count: 10,
+  totalCells: 0,
+  doneCells: 0,
+  syncEditEnabled: false,
+  saveConfigTimer: null,
+  countApplyTimer: null,
+};
+
+// 全局常量
+const EVENTS = [];
+EVENTS.splice(
+  0,
+  EVENTS.length,
+  { value: 'SUBSCRIBE', label: '订阅事件' },
+  { value: 'APP_INSTALL', label: '应用事件' },
+  { value: 'COMPLETE_REGISTRATION', label: '注册事件' },
+  { value: 'PURCHASE', label: '购物事件' },
+  { value: 'ADD_TO_WISHLIST', label: '加入心愿单' },
+);
+const COUNTRIES = [
+  'AD','AE','AF','AG','AI','AL','AM','AO','AQ','AR','AS','AT','AU','AW','AX','AZ',
+  'BA','BB','BD','BE','BF','BG','BH','BI','BJ','BL','BM','BN','BO','BQ','BR','BS',
+  'BT','BV','BW','BY','BZ','CA','CC','CD','CF','CG','CH','CI','CK','CL','CM','CN',
+  'CO','CR','CU','CV','CW','CX','CY','CZ','DE','DJ','DK','DM','DO','DZ','EC','EE',
+  'EG','EH','ER','ES','ET','FI','FJ','FK','FM','FO','FR','GA','GB','GD','GE','GF',
+  'GG','GH','GI','GL','GM','GN','GP','GQ','GR','GS','GT','GU','GW','GY','HK','HM',
+  'HN','HR','HT','HU','ID','IE','IL','IM','IN','IO','IQ','IS','IT','JE','JM','JO',
+  'JP','KE','KG','KH','KI','KM','KN','KR','KW','KY','KZ','LA','LB','LC','LI','LK',
+  'LR','LS','LT','LU','LV','LY','MA','MC','MD','ME','MF','MG','MH','MK','ML','MM',
+  'MN','MO','MP','MQ','MR','MS','MT','MU','MV','MW','MX','MY','MZ','NA','NC','NE',
+  'NF','NG','NI','NL','NO','NP','NR','NU','NZ','OM','PA','PE','PF','PG','PH','PK',
+  'PL','PM','PN','PR','PS','PT','PW','PY','QA','RE','RO','RS','RW','SA','SB','SC',
+  'SE','SG','SH','SI','SJ','SK','SL','SM','SN','SO','SR','SS','ST','SV','SX','SZ',
+  'TC','TD','TF','TG','TH','TJ','TK','TL','TM','TN','TO','TR','TT','TV','TW','TZ',
+  'UA','UG','UM','US','UY','UZ','VA','VC','VE','VG','VI','VN','VU','WF','WS','YE',
+  'YT','ZA','ZM','ZW'
+];
+const COUNTRY_NAMES = {};
+const REGION_NAMES = (typeof Intl !== 'undefined' && typeof Intl.DisplayNames === 'function')
+  ? new Intl.DisplayNames(['zh-CN'], { type: 'region' })
+  : null;
+const DEVICES = ['Android', 'iOS', 'All'];
+const GENDERS = [
+  { value: 0, label: '全部' },
+  { value: 1, label: '男' },
+  { value: 2, label: '女' },
+];
+const AGE_PRESETS = [
+  { value: 'default', label: '18-65', min: 18, max: 65 },
+  { value: 'custom', label: '自定义', min: null, max: null },
+];
+
+// 每账户字段列表（决定 sync 范围）
+// title / campaign_name / page_id / pixel_id 不跨账户同步
+const PER_ACCOUNT_FIELDS = [
+  'event', 'landing_url', 'country', 'device', 'gender',
+  'age_min', 'age_max', 'budget',
+];
+const TARGET_SYNC_FIELDS = [
+  'event', 'page_id', 'pixel_id', 'landing_url', 'application_id', 'object_store_url',
+  'country', 'device', 'gender', 'age_mode', 'age_min', 'age_max',
+  'budget_scope', 'budget_type', 'budget_amount', 'title', 'text',
+];
+const UPLOAD_MAX_ATTEMPTS = 3;
+const UPLOAD_RETRY_BASE_MS = 900;
+const RETRYABLE_UPLOAD_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
+
+// ══════════════════════════════════════════════════════════════════
+// 工具
+// ══════════════════════════════════════════════════════════════════
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s || '';
+  return d.innerHTML;
+}
+
+function countryLabel(code) {
+  return (REGION_NAMES && code ? REGION_NAMES.of(code) : '') || COUNTRY_NAMES[code] || code || '';
+}
+
+function countryOptionsHTML(targetId, selectedCode) {
+  const currentLabel = esc(countryLabel(selectedCode));
+  const options = COUNTRIES.map((code) =>
+    `<option value="${esc(countryLabel(code))}"></option>`
+  ).join('');
+  return `
+    <input type="text" id="country_${targetId}" list="country_list_${targetId}" value="${currentLabel}" placeholder="搜索国家..." oninput="onCountryInput('${targetId}')" onchange="onCountryInput('${targetId}')">
+    <datalist id="country_list_${targetId}">${options}</datalist>
+  `;
+}
+
+function cellKey(slot, acc) { return `${slot}/${acc}`; }
+
+function isVideo(file) { return (file.type || '').startsWith('video/'); }
+
+function filterMedia(files) {
+  return files.filter(f => f.type.startsWith('video/') || f.type.startsWith('image/'));
+}
+function sortFiles(files) {
+  return files.slice().sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
+  );
+}
+
+function toggleSection(id) {
+  document.getElementById(id).classList.toggle('collapsed');
+}
+
+function getCountInput() {
+  return document.getElementById('bottomCountInput') || document.getElementById('countInput');
+}
+
+function syncCountInputs(value) {
+  for (const id of ['countInput', 'bottomCountInput']) {
+    const el = document.getElementById(id);
+    if (el) el.value = value;
+  }
+}
+
+function nextUploadToken(slotIdx, accountId) {
+  const key = cellKey(slotIdx, accountId);
+  const token = (state.uploadTokens[key] || 0) + 1;
+  state.uploadTokens[key] = token;
+  return token;
+}
+
+function isActiveUploadToken(slotIdx, accountId, token) {
+  return state.uploadTokens[cellKey(slotIdx, accountId)] === token;
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function isRetryableUploadError(error) {
+  if (error && typeof error.status === 'number' && RETRYABLE_UPLOAD_STATUSES.has(error.status)) {
+    return true;
+  }
+  const msg = String(error?.message || '').toLowerCase();
+  return msg.includes('failed to fetch') ||
+         msg.includes('networkerror') ||
+         msg.includes('network request failed') ||
+         msg.includes('timeout');
+}
+
+const UPLOAD_CONCURRENCY = 4;
+
+// ══════════════════════════════════════════════════════════════════
+// 并发上传池
+// ══════════════════════════════════════════════════════════════════
+class UploadPool {
+  constructor(max) {
+    this.max = max;
+    this.running = 0;
+    this.queue = [];
+  }
+  add(fn) {
+    return new Promise(resolve => {
+      this.queue.push({ fn, resolve });
+      this._next();
+    });
+  }
+  _next() {
+    while (this.running < this.max && this.queue.length) {
+      const { fn, resolve } = this.queue.shift();
+      this.running++;
+      fn().then(r => { resolve(r); }).catch(e => { resolve({ error: e }); }).finally(() => {
+        this.running--;
+        this._next();
+      });
+    }
+  }
+}
+const uploadPool = new UploadPool(UPLOAD_CONCURRENCY);
+
+// ══════════════════════════════════════════════════════════════════
+// 加载任务信息
+// ══════════════════════════════════════════════════════════════════
+async function loadTask() {
+  try {
+    const resp = await fetch('/upload/info?task=' + taskId);
+    if (!resp.ok) {
+      document.body.innerHTML =
+        '<div style="text-align:center;padding:60px;color:#999;">任务不存在或已过期</div>';
+      return;
+    }
+    taskInfo = await resp.json();
+  } catch (e) {
+    document.body.innerHTML =
+      '<div style="text-align:center;padding:60px;color:#f5222d;">加载失败: ' + esc(e.message) + '</div>';
+    return;
+  }
+
+  if (taskInfo.published) {
+    document.body.innerHTML =
+      '<div style="text-align:center;padding:60px;color:#52c41a;font-size:16px;">该任务已发布完成</div>';
+    return;
+  }
+
+  const m = taskInfo.targets.length;
+  const n = taskInfo.count || 10;
+  state.count = n;
+  state.baseName = taskInfo.base_name || '';
+  state.totalCells = m * n;
+  document.documentElement.style.setProperty('--acc-count', m);
+  document.getElementById('taskInfo').textContent =
+    `${m} 个账户 · 每账户 ${n} 条广告 · 共 ${m * n} 个上传格`;
+  document.getElementById('baseNameInput').value = state.baseName;
+  syncCountInputs(state.count);
+
+  // 初始化每账户的字段（从后端拿到的或者默认值）
+  for (const t of taskInfo.targets) {
+    state.accountFields[t.account_id] = {
+      event:         t.event || 'SUBSCRIBE',
+      landing_url:   t.landing_url || '',
+      country:       t.country || 'BR',
+      device:        t.device || 'Android',
+      gender:        typeof t.gender === 'number' ? t.gender : 0,
+      age_min:       t.age_min || 18,
+      age_max:       t.age_max || 65,
+      budget:        t.budget || 20,
+      title:         t.title || '',
+      text:          t.text || '',
+      campaign_name: t.campaign_name || '',
+      page_id:       t.page_id || '',
+      pixel_id:      t.pixel_id || '',
+      edited:        new Set(),
+    };
+    // 后端已有值的字段标记为 edited，避免首次 sync 覆盖
+    for (const f of PER_ACCOUNT_FIELDS) {
+      if (t[f] !== undefined && t[f] !== '' && t[f] !== null) {
+        state.accountFields[t.account_id].edited.add(f);
+      }
+    }
+  }
+
+  // 用后端已有的 slot 状态初始化（任务被重新打开时）
+  state.doneCells = 0;
+  for (let i = 0; i < n; i++) {
+    const row = taskInfo.slots[i] || {};
+    for (const t of taskInfo.targets) {
+      const cell = row[t.account_id] || { status: 'idle' };
+      state.cells[cellKey(i, t.account_id)] = {
+        status: cell.status || 'idle',
+        filename: cell.filename || '',
+        error: cell.error || '',
+      };
+      if (cell.status === 'done') state.doneCells++;
+    }
+  }
+
+  renderColumns();
+  updateProgress();
+  updatePublishBtn();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// 账户列渲染 — 每账户一整列（拖拽区 + 配置卡 + 素材列表）
+// ══════════════════════════════════════════════════════════════════
+function renderColumns() {
+  const container = document.getElementById('columnsContainer');
+  container.innerHTML = '';
+
+  for (const t of taskInfo.targets) {
+    const aid = t.account_id;
+
+    const col = document.createElement('div');
+    col.className = 'account-column';
+    col.id = 'col_' + aid;
+
+    // 1) 拖拽区
+    const drop = document.createElement('div');
+    drop.className = 'col-drop-zone';
+    drop.innerHTML = `
+      <div class="icon">↑</div>
+      <div>拖文件到 <strong>${esc(t.account_name || aid)}</strong></div>
+      <div class="sub">或点击选择</div>
+      <input type="file" id="fileinput_${aid}" multiple accept="video/*,image/*" style="display:none">
+    `;
+    drop.addEventListener('dragover', e => {
+      e.preventDefault();
+      drop.classList.add('dragover');
+    });
+    drop.addEventListener('dragleave', () => drop.classList.remove('dragover'));
+    drop.addEventListener('drop', e => onDropColumn(e, aid));
+    drop.addEventListener('click', () => document.getElementById('fileinput_' + aid).click());
+    col.appendChild(drop);
+    // 文件选择器 change 事件（等 col 插入 dom 后绑定）
+    setTimeout(() => {
+      const input = document.getElementById('fileinput_' + aid);
+      if (input) input.addEventListener('change', e => onFilesPickedColumn(e, aid));
+    }, 0);
+
+    // 2) 配置卡
+    const card = document.createElement('div');
+    card.className = 'config-card';
+    card.id = 'config_' + aid;
+    card.innerHTML = configCardHTML(t);
+    col.appendChild(card);
+
+    // 3) 素材列表
+    const listHeader = document.createElement('div');
+    listHeader.className = 'slots-list-header';
+    listHeader.id = 'slots_header_' + aid;
+    listHeader.textContent = `素材 0 / ${state.count}`;
+    col.appendChild(listHeader);
+
+    const list = document.createElement('div');
+    list.className = 'slots-list';
+    list.id = 'slots_' + aid;
+    col.appendChild(list);
+
+    container.appendChild(col);
+    renderSlotList(aid);
+  }
+  updateSyncHints();
+  updateSlotsHeaders();
+}
+
+function configCardHTML(t) {
+  const aid = t.account_id;
+  const f = state.accountFields[aid];
+
+  const eventOptions = EVENTS.map(e =>
+    `<option value="${e.value}" ${f.event === e.value ? 'selected' : ''}>${e.label}</option>`
+  ).join('');
+
+  const countryOptions = COUNTRIES.map(c =>
+    `<option value="${c}" ${f.country === c ? 'selected' : ''}>${c} ${COUNTRY_NAMES[c] || ''}</option>`
+  ).join('');
+
+  const deviceOptions = DEVICES.map(d =>
+    `<option value="${d}" ${f.device === d ? 'selected' : ''}>${d}</option>`
+  ).join('');
+
+  const genderOptions = GENDERS.map(g =>
+    `<option value="${g.value}" ${f.gender === g.value ? 'selected' : ''}>${g.label}</option>`
+  ).join('');
+
+  const agePresetIdx = AGE_PRESETS.findIndex(p => p.min === f.age_min && p.max === f.age_max);
+  const ageOptions = AGE_PRESETS.map((p, i) =>
+    `<option value="${i}" ${i === agePresetIdx ? 'selected' : ''}>${p.label}</option>`
+  ).join('');
+
+  const availPages = t.available_pages || [];
+  const pageOptions = availPages.length === 0
+    ? `<option value="${esc(f.page_id)}">${f.page_id ? esc(f.page_id) + ' (ID)' : '— 无主页 —'}</option>`
+    : `<option value="">— 请选择 —</option>` + availPages.map(p =>
+        `<option value="${p.id}" ${f.page_id === p.id ? 'selected' : ''}>${esc(p.name)} (${p.id})</option>`
+      ).join('');
+
+  const availPixels = t.available_pixels || [];
+  const pixelOptions = availPixels.length === 0
+    ? `<option value="${esc(f.pixel_id)}">${f.pixel_id ? esc(f.pixel_id) + ' (ID)' : '— 无像素 —'}</option>`
+    : `<option value="">— 请选择 —</option>` + availPixels.map(p =>
+        `<option value="${p.id}" ${f.pixel_id === p.id ? 'selected' : ''}>${esc(p.name)} (${p.id})</option>`
+      ).join('');
+
+  return `
+      <div class="card-head">
+        <div class="card-head-copy">
+          <span class="section-kicker">账户配置</span>
+          <h4>${esc(t.account_name || aid)}</h4>
+          <span class="alias">${esc(t.account_alias || '')}</span>
+        </div>
+        <span class="id">act_${esc(aid)}</span>
+      </div>
+
+      <div class="card-row">
+        <div class="field">
+          <label>系列名称</label>
+          <input type="text" id="campaign_name_${aid}" value="${esc(f.campaign_name)}"
+                 placeholder="留空则用基础名-账户号" oninput="onFieldChange('${aid}','campaign_name')">
+        </div>
+      </div>
+
+      <div class="card-row">
+        <div class="field">
+          <label>转化事件</label>
+          <select id="event_${aid}" onchange="onFieldChange('${aid}','event')">${eventOptions}</select>
+        </div>
+      </div>
+
+      <div class="card-row">
+        <div class="field">
+          <label>公共主页</label>
+          <select id="page_id_${aid}" onchange="onFieldChange('${aid}','page_id')">${pageOptions}</select>
+        </div>
+      </div>
+
+      <div class="card-row">
+        <div class="field">
+          <label>像素</label>
+          <select id="pixel_id_${aid}" onchange="onFieldChange('${aid}','pixel_id')">${pixelOptions}</select>
+        </div>
+      </div>
+
+      <div class="card-row">
+        <div class="field">
+          <label>URL</label>
+          <input type="url" id="landing_url_${aid}" value="${esc(f.landing_url)}"
+                 placeholder="https://..." oninput="onFieldChange('${aid}','landing_url')">
+        </div>
+      </div>
+
+      <div class="card-row row-2">
+        <div class="field">
+          <label>国家</label>
+          <select id="country_${aid}" onchange="onFieldChange('${aid}','country')">${countryOptions}</select>
+        </div>
+        <div class="field">
+          <label>设备</label>
+          <select id="device_${aid}" onchange="onFieldChange('${aid}','device')">${deviceOptions}</select>
+        </div>
+      </div>
+
+      <div class="card-row row-2">
+        <div class="field">
+          <label>性别</label>
+          <select id="gender_${aid}" onchange="onFieldChange('${aid}','gender')">${genderOptions}</select>
+        </div>
+        <div class="field">
+          <label>年龄</label>
+          <select id="age_preset_${aid}" onchange="onAgePresetChange('${aid}', this.value)">${ageOptions}</select>
+        </div>
+      </div>
+
+      <div class="card-row">
+        <div class="field">
+          <label>日预算 ($)</label>
+          <input type="number" id="budget_${aid}" min="1" step="1" value="${f.budget}"
+                 oninput="onFieldChange('${aid}','budget')">
+        </div>
+      </div>
+
+      <div class="card-row">
+        <div class="field">
+          <label>广告标题</label>
+          <input type="text" id="title_${aid}" value="${esc(f.title)}"
+                 placeholder="输入标题..." oninput="onFieldChange('${aid}','title')">
+        </div>
+      </div>
+
+      <div class="card-row">
+        <div class="field">
+          <label>广告文案</label>
+          <textarea id="text_${aid}" placeholder="输入广告正文..."
+                    oninput="onFieldChange('${aid}','text')">${esc(f.text)}</textarea>
+        </div>
+      </div>
+
+      <div class="synced-hint" id="syncHint_${aid}" style="display:none">
+        这个账户还有字段未单独编辑，点“同步到全部”时会沿用首个账户的参数。
+      </div>
+  `;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// 素材列表（每列内部的垂直槽位）
+// ══════════════════════════════════════════════════════════════════
+function renderSlotList(accountId) {
+  const list = document.getElementById('slots_' + accountId);
+  if (!list) return;
+  list.innerHTML = '';
+  for (let i = 0; i < state.count; i++) {
+    const item = document.createElement('div');
+    item.id = `slot_${i}_${accountId}`;
+    renderSlot(i, accountId, item);
+    list.appendChild(item);
+  }
+}
+
+function renderSlot(slotIdx, accountId, el) {
+  const key = cellKey(slotIdx, accountId);
+  const cell = state.cells[key] || { status: 'idle' };
+  const file = state.cellFiles[key];
+  const previewURL = state.cellPreviews[key];
+
+  el.className = 'slot-item ' + cell.status;
+
+  if (cell.status === 'idle') {
+    el.innerHTML = `
+      <div class="slot-idx">${slotIdx + 1}</div>
+      <div class="info"><div class="name" style="color:var(--text-faint)">空</div></div>
+    `;
+    return;
+  }
+
+  let previewTag = '';
+  if (file) {
+    previewTag = isVideo(file)
+      ? `<video class="preview" src="${previewURL}#t=0.1" preload="metadata" muted playsinline></video>`
+      : `<img class="preview" src="${previewURL}" alt="">`;
+  } else {
+    previewTag = `<div class="preview" style="display:flex;align-items:center;justify-content:center;color:#fff;font-size:9px">${esc(cell.filename || '').slice(0, 16)}</div>`;
+  }
+
+  let statusText = '';
+  let action = '';
+  if (cell.status === 'queued') {
+    statusText = '⏳ 排队';
+  } else if (cell.status === 'uploading') {
+    statusText = `⬆ 上传中 ${cell.progress || ''}`;
+  } else if (cell.status === 'done') {
+    statusText = '✓ 完成';
+    action = `<button class="clear-cell-btn" onclick="event.stopPropagation();clearCell(${slotIdx},'${accountId}')">×</button>`;
+  } else if (cell.status === 'failed') {
+    statusText = '✗ ' + (cell.error || '失败').slice(0, 24);
+    action = `<button class="retry-btn" onclick="event.stopPropagation();retryCell(${slotIdx},'${accountId}')">重试</button>`;
+  }
+
+  el.innerHTML = `
+    <div class="slot-idx">${slotIdx + 1}</div>
+    ${previewTag}
+    <div class="info">
+      <div class="name">${esc(file?.name || cell.filename || '')}</div>
+      <div class="status">${statusText}</div>
+    </div>
+    <div class="slot-action">${action}</div>
+  `;
+}
+
+function reRenderSlot(slotIdx, accountId) {
+  const el = document.getElementById(`slot_${slotIdx}_${accountId}`);
+  if (el) renderSlot(slotIdx, accountId, el);
+}
+
+function updateSlotsHeaders() {
+  for (const t of taskInfo.targets) {
+    const header = document.getElementById('slots_header_' + t.account_id);
+    if (!header) continue;
+    let filled = 0;
+    for (let i = 0; i < state.count; i++) {
+      const c = state.cells[cellKey(i, t.account_id)];
+      if (c && c.status === 'done') filled++;
+    }
+    header.textContent = `素材 ${filled} / ${state.count}`;
+  }
+}
+
+function onFieldChange(accountId, field) {
+  const f = state.accountFields[accountId];
+  const el = document.getElementById(`${field}_${accountId}`);
+  if (!el) return;
+  let v = el.value;
+  // 类型转换
+  if (['gender', 'age_min', 'age_max'].includes(field)) {
+    v = parseInt(v, 10) || 0;
+  } else if (field === 'budget') {
+    v = parseFloat(v) || 0;
+  }
+  f[field] = v;
+  f.edited.add(field);
+
+  // 仅同步 PER_ACCOUNT_FIELDS 中的字段（title/campaign_name/page_id/pixel_id 不跨账户同步）
+  if (PER_ACCOUNT_FIELDS.includes(field)) {
+    for (const t of taskInfo.targets) {
+      if (t.account_id === accountId) continue;
+      const dst = state.accountFields[t.account_id];
+      if (dst.edited.has(field)) continue;
+      dst[field] = v;
+      const dstEl = document.getElementById(`${field}_${t.account_id}`);
+      if (dstEl) {
+        if (dstEl.tagName === 'SELECT') dstEl.value = v;
+        else dstEl.value = v;
+      }
+    }
+  }
+  updateSyncHints();
+  scheduleSaveConfig();
+}
+
+function onAgePresetChange(accountId, idxStr) {
+  const idx = parseInt(idxStr, 10);
+  const preset = AGE_PRESETS[idx];
+  if (!preset) return;
+  const f = state.accountFields[accountId];
+  f.age_min = preset.min;
+  f.age_max = preset.max;
+  f.edited.add('age_min');
+  f.edited.add('age_max');
+  // 同步年龄到其他未编辑过年龄的账户
+  for (const t of taskInfo.targets) {
+    if (t.account_id === accountId) continue;
+    const dst = state.accountFields[t.account_id];
+    if (dst.edited.has('age_min') || dst.edited.has('age_max')) continue;
+    dst.age_min = preset.min;
+    dst.age_max = preset.max;
+    const dstEl = document.getElementById(`age_preset_${t.account_id}`);
+    if (dstEl) dstEl.value = idx;
+  }
+  updateSyncHints();
+  scheduleSaveConfig();
+}
+
+function onGlobalChange(what) {
+  if (what === 'base_name') {
+    state.baseName = document.getElementById('baseNameInput').value || '';
+  } else if (what === 'count') {
+    const input = getCountInput();
+    const newCount = Math.max(1, Math.min(50, parseInt(input?.value, 10) || 10));
+    const oldN = state.count;
+    state.count = newCount;
+    state.totalCells = taskInfo.targets.length * newCount;
+    syncCountInputs(newCount);
+
+    if (newCount > oldN) {
+      // 新增行 → 所有账户对应 cell 标记为 idle
+      for (let i = oldN; i < newCount; i++) {
+        for (const t of taskInfo.targets) {
+          state.cells[cellKey(i, t.account_id)] = { status: 'idle' };
+        }
+      }
+    } else if (newCount < oldN) {
+      // 清掉多余行的本地状态 + 预览 URL
+      for (let i = newCount; i < oldN; i++) {
+        for (const t of taskInfo.targets) {
+          const key = cellKey(i, t.account_id);
+          if (state.cellPreviews[key]) {
+            URL.revokeObjectURL(state.cellPreviews[key]);
+            delete state.cellPreviews[key];
+          }
+          delete state.cellFiles[key];
+          if (state.cells[key]?.status === 'done') state.doneCells--;
+          delete state.cells[key];
+        }
+      }
+    }
+    taskInfo.count = newCount;
+    const m = taskInfo.targets.length;
+    document.getElementById('taskInfo').textContent =
+      `${m} 个账户 · 每账户 ${newCount} 条广告 · 共 ${m * newCount} 个上传格`;
+
+    // 重新渲染每账户的素材列表
+    for (const t of taskInfo.targets) renderSlotList(t.account_id);
+    updateSlotsHeaders();
+    updateProgress();
+    updatePublishBtn();
+  }
+  scheduleSaveConfig();
+}
+
+function updateSyncHints() {
+  for (const t of taskInfo.targets) {
+    const f = state.accountFields[t.account_id];
+    const hint = document.getElementById('syncHint_' + t.account_id);
+    if (!hint) continue;
+    hint.style.display = f.edited.size < PER_ACCOUNT_FIELDS.length ? 'block' : 'none';
+  }
+}
+
+function syncToAll() {
+  // 把第一个账户的所有字段强制同步到其他所有账户（清除他们的 edited 标记）
+  if (taskInfo.targets.length < 2) return;
+  const src = taskInfo.targets[0];
+  const srcF = state.accountFields[src.account_id];
+  for (let i = 1; i < taskInfo.targets.length; i++) {
+    const t = taskInfo.targets[i];
+    const dst = state.accountFields[t.account_id];
+    for (const field of PER_ACCOUNT_FIELDS) {
+      dst[field] = srcF[field];
+    }
+    dst.edited = new Set();
+  }
+  // 只重渲染配置卡，不碰 slot 列表和拖拽区（保留已上传状态）
+  for (const t of taskInfo.targets) {
+    const card = document.getElementById('config_' + t.account_id);
+    if (card) card.innerHTML = configCardHTML(t);
+  }
+  updateSyncHints();
+  scheduleSaveConfig();
+}
+
+function scheduleSaveConfig() {
+  clearTimeout(state.saveConfigTimer);
+  state.saveConfigTimer = setTimeout(saveConfigToServer, 500);
+}
+
+async function saveConfigToServer() {
+  const body = {
+    count: state.count,
+    base_name: state.baseName,
+    accounts: taskInfo.targets.map(t => {
+      const f = state.accountFields[t.account_id];
+      return {
+        account_id: t.account_id,
+        campaign_name: f.campaign_name,
+        page_id: f.page_id,
+        pixel_id: f.pixel_id,
+        event: f.event,
+        landing_url: f.landing_url,
+        country: f.country,
+        device: f.device,
+        gender: f.gender,
+        age_min: f.age_min,
+        age_max: f.age_max,
+        budget: f.budget,
+        title: f.title,
+        text: f.text,
+      };
+    }),
+  };
+  try {
+    await fetch('/upload/config?task=' + taskId, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch (e) {
+    console.warn('save config failed', e);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// 状态更新 / 进度 / 发布按钮
+// ══════════════════════════════════════════════════════════════════
+function setCellStatus(slotIdx, accountId, status, extra = {}) {
+  const key = cellKey(slotIdx, accountId);
+  const prev = state.cells[key] || {};
+  const wasDone = prev.status === 'done';
+  state.cells[key] = { ...prev, status, ...extra };
+  if (status === 'done' && !wasDone) state.doneCells++;
+  if (status !== 'done' && wasDone) state.doneCells--;
+  reRenderSlot(slotIdx, accountId);
+  updateProgress();
+  updateSlotsHeaders();
+  updatePublishBtn();
+}
+
+function updateProgress() {
+  const el = document.getElementById('totalProgress');
+  const lbl = document.getElementById('progressLabel');
+  const pct = state.totalCells > 0 ? (state.doneCells / state.totalCells * 100) : 0;
+  if (el) el.style.width = pct + '%';
+  if (lbl) lbl.textContent = `总进度 ${state.doneCells} / ${state.totalCells}`;
+}
+
+function updatePublishBtn() {
+  const btn = document.getElementById('publishBtn');
+  let canPublish = false;
+  if (taskInfo) {
+    canPublish = taskInfo.targets.every(t => {
+      for (let i = 0; i < state.count; i++) {
+        if (state.cells[cellKey(i, t.account_id)]?.status === 'done') return true;
+      }
+      return false;
+    });
+  }
+  btn.disabled = !canPublish;
+  btn.textContent = canPublish
+    ? `一键创建 + 发布（${taskInfo.targets.length} 个账户）`
+    : '至少每账户传 1 个素材才能发布';
+}
+
+// ══════════════════════════════════════════════════════════════════
+// 每列拖拽 / 文件选择
+// ══════════════════════════════════════════════════════════════════
+async function onDropColumn(e, accountId) {
+  e.preventDefault();
+  const zone = e.currentTarget;
+  zone.classList.remove('dragover');
+
+  let files = [];
+  const items = e.dataTransfer.items;
+  if (items && items.length && typeof items[0].webkitGetAsEntry === 'function') {
+    const entries = [];
+    for (let i = 0; i < items.length; i++) {
+      const entry = items[i].webkitGetAsEntry();
+      if (entry) entries.push(entry);
+    }
+    for (const entry of entries) await walkEntry(entry, files);
+  } else {
+    files = [...e.dataTransfer.files];
+  }
+  assignBatchToColumn(accountId, sortFiles(filterMedia(files)));
+}
+
+function onFilesPickedColumn(e, accountId) {
+  assignBatchToColumn(accountId, sortFiles(filterMedia([...e.target.files])));
+  e.target.value = '';
+}
+
+function walkEntry(entry, files) {
+  return new Promise(resolve => {
+    if (entry.isFile) {
+      entry.file(f => { files.push(f); resolve(); }, () => resolve());
+    } else if (entry.isDirectory) {
+      const reader = entry.createReader();
+      const readAll = () => {
+        reader.readEntries(async batch => {
+          if (!batch.length) { resolve(); return; }
+          for (const child of batch) await walkEntry(child, files);
+          readAll();
+        }, () => resolve());
+      };
+      readAll();
+    } else {
+      resolve();
+    }
+  });
+}
+
+function assignBatchToColumn(accountId, files) {
+  if (!files.length) {
+    setStatus('未找到视频或图片文件', 'error');
+    return;
+  }
+  let assigned = 0;
+  for (const file of files) {
+    // 在该账户的 slot 列表里找第一个 idle 格子
+    let slotIdx = -1;
+    for (let s = 0; s < state.count; s++) {
+      const c = state.cells[cellKey(s, accountId)] || { status: 'idle' };
+      if (c.status === 'idle') { slotIdx = s; break; }
+    }
+    if (slotIdx < 0) break;
+    assignCell(slotIdx, accountId, file);
+    assigned++;
+  }
+  if (assigned === 0) {
+    setStatus('该账户的素材位都已占用，请先清除或增大广告数', 'error');
+  } else {
+    const acctName = taskInfo.targets.find(t => t.account_id === accountId)?.account_name || accountId;
+    setStatus(`已向 ${acctName} 分配 ${assigned} 个素材`);
+  }
+}
+
+function assignCell(slotIdx, accountId, file) {
+  const key = cellKey(slotIdx, accountId);
+  const token = nextUploadToken(slotIdx, accountId);
+  if (state.cellPreviews[key]) URL.revokeObjectURL(state.cellPreviews[key]);
+  state.cellFiles[key] = file;
+  state.cellPreviews[key] = URL.createObjectURL(file);
+  setCellStatus(slotIdx, accountId, 'queued', { filename: file.name });
+  uploadPool.add(() => uploadCell(slotIdx, accountId, file, token));
+}
+
+// ══════════════════════════════════════════════════════════════════
+// 上传 / 清除 / 重试
+// ══════════════════════════════════════════════════════════════════
+async function parseApiResponse(r) {
+  const raw = await r.text();
+  let data = null;
+
+  if (raw) {
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      data = null;
+    }
+  }
+
+  if (!r.ok) {
+    const detail = (data && data.error) || raw || `HTTP ${r.status}`;
+    const error = new Error(`HTTP ${r.status}: ${detail}`);
+    error.status = r.status;
+    throw error;
+  }
+
+  if (data === null) {
+    const error = new Error(raw ? `HTTP ${r.status}: ${raw.slice(0, 120)}` : `HTTP ${r.status}: Empty response`);
+    error.status = r.status;
+    throw error;
+  }
+
+  return data;
+}
+
+async function uploadCell(slotIdx, accountId, file) {
+  setCellStatus(slotIdx, accountId, 'uploading', { progress: 20 });
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const r = await fetch(
+      `/upload/file?task=${taskId}&slot=${slotIdx}&account=${accountId}`,
+      { method: 'POST', body: fd }
+    );
+    const data = await parseApiResponse(r);
+    if (data.ok) {
+      setCellStatus(slotIdx, accountId, 'done');
+    } else {
+      setCellStatus(slotIdx, accountId, 'failed', { error: data.error || '未知错误' });
+    }
+  } catch (e) {
+    setCellStatus(slotIdx, accountId, 'failed', { error: e.message });
+  }
+}
+
+async function uploadCell(slotIdx, accountId, file, token) {
+  for (let attempt = 1; attempt <= UPLOAD_MAX_ATTEMPTS; attempt++) {
+    if (!isActiveUploadToken(slotIdx, accountId, token)) return;
+
+    const attemptLabel = attempt === 1 ? '' : ` (Retry ${attempt}/${UPLOAD_MAX_ATTEMPTS})`;
+    setCellStatus(slotIdx, accountId, 'uploading', {
+      filename: file.name,
+      progress: attemptLabel,
+      error: '',
+    });
+
+    const fd = new FormData();
+    fd.append('file', file);
+
+    try {
+      const r = await fetch(
+        `/upload/file?task=${taskId}&slot=${slotIdx}&account=${accountId}`,
+        { method: 'POST', body: fd }
+      );
+      const data = await parseApiResponse(r);
+      if (!isActiveUploadToken(slotIdx, accountId, token)) return;
+
+      if (data.ok) {
+        setCellStatus(slotIdx, accountId, 'done');
+        return;
+      }
+
+      const error = new Error(data.error || 'Unknown error');
+      throw error;
+    } catch (e) {
+      if (!isActiveUploadToken(slotIdx, accountId, token)) return;
+
+      if (attempt < UPLOAD_MAX_ATTEMPTS && isRetryableUploadError(e)) {
+        setCellStatus(slotIdx, accountId, 'uploading', {
+          filename: file.name,
+          progress: ` (Retrying ${attempt + 1}/${UPLOAD_MAX_ATTEMPTS})`,
+          error: '',
+        });
+        const backoff = (UPLOAD_RETRY_BASE_MS * (2 ** (attempt - 1))) + Math.floor(Math.random() * 250);
+        await sleep(backoff);
+        continue;
+      }
+
+      setCellStatus(slotIdx, accountId, 'failed', { error: e.message });
+      return;
+    }
+  }
+}
+
+async function clearCell(slotIdx, accountId) {
+  nextUploadToken(slotIdx, accountId);
+  try {
+    const r = await fetch(
+      `/upload/clear?task=${taskId}&slot=${slotIdx}&account=${accountId}`,
+      { method: 'POST' }
+    );
+    const data = await parseApiResponse(r);
+    if (data.ok) {
+      const key = cellKey(slotIdx, accountId);
+      if (state.cellPreviews[key]) {
+        URL.revokeObjectURL(state.cellPreviews[key]);
+        delete state.cellPreviews[key];
+      }
+      delete state.cellFiles[key];
+      setCellStatus(slotIdx, accountId, 'idle', { filename: '' });
+    }
+  } catch (e) {
+    alert('清除失败: ' + e.message);
+  }
+}
+
+async function retryCell(slotIdx, accountId) {
+  const key = cellKey(slotIdx, accountId);
+  const file = state.cellFiles[key];
+  if (!file) {
+    alert('该素材已失效，请重新拖入');
+    return;
+  }
+  const token = nextUploadToken(slotIdx, accountId);
+  setCellStatus(slotIdx, accountId, 'queued');
+  uploadPool.add(() => uploadCell(slotIdx, accountId, file, token));
+}
+
+// ══════════════════════════════════════════════════════════════════
+// 发布
+// ══════════════════════════════════════════════════════════════════
+async function publish() {
+  const btn = document.getElementById('publishBtn');
+  btn.disabled = true;
+  setStatus('正在保存配置...');
+
+  // 先保存一次配置（文案/定向/URL 等）
+  await saveConfigToServer();
+
+  setStatus('正在并发创建系列并发布到所有账户...');
+
+  try {
+    const r = await fetch('/upload/publish?task=' + taskId, { method: 'POST' });
+    const data = await parseApiResponse(r);
+
+    const results = data.results || [];
+    const okCount = results.filter(r => r.ok).length;
+    const failCount = results.length - okCount;
+
+    setStatus(
+      `发布完成: ${okCount} 成功, ${failCount} 失败`,
+      failCount > 0 ? 'error' : 'success'
+    );
+
+    const box = document.getElementById('resultBox');
+    box.classList.add('show');
+    const list = document.getElementById('resultList');
+    list.innerHTML = '';
+    for (const r of results) {
+      const item = document.createElement('div');
+      item.className = 'result-item ' + (r.ok ? 'ok' : 'failed');
+      item.innerHTML = r.ok
+        ? `✓ ${esc(r.account_name)} — 创建 ${r.ad_count} 条广告`
+        : `✗ ${esc(r.account_name)} — ${esc(r.error || '未知错误')}`;
+      list.appendChild(item);
+    }
+
+    if (okCount === results.length && results.length > 0) {
+      btn.textContent = '已全部发布';
+    } else {
+      btn.disabled = false;
+      btn.textContent = '重试发布';
+    }
+  } catch (e) {
+    setStatus('发布请求失败: ' + e.message, 'error');
+    btn.disabled = false;
+  }
+}
+
+function setStatus(msg, cls = '') {
+  const el = document.getElementById('statusMsg');
+  el.textContent = msg;
+  el.className = 'status-msg' + (cls ? ' ' + cls : '');
+}
+
+function syncLabelText() {
+  const wrap = document.querySelector('.bottom-toggle');
+  const el = document.getElementById('syncToggleText');
+  if (el) el.textContent = state.syncEditEnabled ? '已开启同步，修改一个系列会更新其他系列' : '关闭时各系列独立，打开后同步更新';
+  if (wrap) wrap.classList.toggle('active', !!state.syncEditEnabled);
+}
+
+function applyFieldValueToUI(targetId, field, value) {
+  const el = document.getElementById(`${field}_${targetId}`);
+  if (!el) return;
+  if (field === 'country') {
+    el.value = countryLabel(value);
+    return;
+  }
+  el.value = value ?? '';
+}
+
+function rerenderTargetCard(targetId) {
+  const target = findTargetById(targetId);
+  const card = document.getElementById('config_' + targetId);
+  if (target && card) card.innerHTML = configCardHTML(target);
+}
+
+function syncFieldsToOtherTargets(sourceTargetId, payload) {
+  if (!state.syncEditEnabled || !taskInfo) return;
+  for (const target of taskInfo.targets) {
+    const targetId = getTargetId(target);
+    if (targetId === sourceTargetId) continue;
+    const fields = state.accountFields[targetId];
+    if (!fields) continue;
+    for (const [field, value] of Object.entries(payload)) {
+      fields[field] = value;
+      fields.edited.add(field);
+      if (field === 'budget_amount') fields.budget = value;
+    }
+    const needsRerender = Object.keys(payload).some((field) => ['event', 'age_mode'].includes(field));
+    if (needsRerender) rerenderTargetCard(targetId);
+    else {
+      for (const [field, value] of Object.entries(payload)) applyFieldValueToUI(targetId, field, value);
+    }
+  }
+}
+
+window.onSyncToggleChange = function() {
+  const checkbox = document.getElementById('syncToggle');
+  state.syncEditEnabled = !!checkbox?.checked;
+  syncLabelText();
+  setStatus(state.syncEditEnabled ? '系列同步已开启，后续修改会同步到其他系列。' : '系列同步已关闭，各系列独立编辑。');
+};
+
+window.updateSyncHints = function() {
+  syncLabelText();
+};
+
+window.syncToAll = function() {
+  if (!taskInfo || !taskInfo.targets?.length) return;
+  const sourceTargetId = getTargetId(taskInfo.targets[0]);
+  const source = state.accountFields[sourceTargetId];
+  if (!source) return;
+  const payload = {};
+  for (const field of TARGET_SYNC_FIELDS) {
+    payload[field] = source[field];
+  }
+  syncFieldsToOtherTargets(sourceTargetId, payload);
+  setStatus('已把第一个系列的配置同步到其他系列。', 'success');
+  scheduleSaveConfig();
+};
+
+function getTargetId(target) {
+  return target.target_id || target.account_id;
+}
+
+function getSortedTargets() {
+  return [...(taskInfo?.targets || [])].sort((a, b) => {
+    if (a.account_id === b.account_id) {
+      return (a.series_index || 0) - (b.series_index || 0);
+    }
+    return String(a.account_name || a.account_id).localeCompare(String(b.account_name || b.account_id), undefined, { sensitivity: 'base' });
+  });
+}
+
+function findTargetById(targetId) {
+  return (taskInfo?.targets || []).find((target) => getTargetId(target) === targetId);
+}
+
+function getBaseNameInput() {
+  return document.getElementById('namingBaseInput') || document.getElementById('baseNameInput');
+}
+
+function syncBaseNameInputs(value) {
+  for (const id of ['baseNameInput', 'namingBaseInput']) {
+    const el = document.getElementById(id);
+    if (el) el.value = value;
+  }
+}
+
+function currentDateCode() {
+  if (taskInfo?.date_code) return taskInfo.date_code;
+  const now = new Date();
+  return `${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+}
+
+function isAppInstallEvent(value) {
+  return value === 'APP_INSTALL';
+}
+
+function autoCampaignName(target) {
+  const prefix = (state.baseName || '').trim() || '投手-渠道号-产品';
+  return `${prefix}-${currentDateCode()}-${target.series_suffix || 'A'}`;
+}
+
+let syncingTopScroll = false;
+let syncingMainScroll = false;
+
+function syncTopScrollWidth() {
+  const shell = document.getElementById('topScrollShell');
+  const track = document.getElementById('topScrollTrack');
+  const spacer = document.getElementById('topScrollSpacer');
+  const container = document.getElementById('columnsContainer');
+  if (!shell || !track || !spacer || !container) return;
+
+  const needsScroll = container.scrollWidth > container.clientWidth + 4;
+  shell.style.display = needsScroll ? 'block' : 'none';
+  spacer.style.width = `${container.scrollWidth}px`;
+  track.scrollLeft = needsScroll ? container.scrollLeft : 0;
+}
+
+function bindTopScrollSync() {
+  const track = document.getElementById('topScrollTrack');
+  const container = document.getElementById('columnsContainer');
+  if (!track || !container || track.dataset.bound === '1') return;
+  track.dataset.bound = '1';
+
+  track.addEventListener('scroll', () => {
+    if (syncingMainScroll) return;
+    syncingTopScroll = true;
+    container.scrollLeft = track.scrollLeft;
+    syncingTopScroll = false;
+  });
+
+  container.addEventListener('scroll', () => {
+    if (syncingTopScroll) return;
+    syncingMainScroll = true;
+    track.scrollLeft = container.scrollLeft;
+    syncingMainScroll = false;
+  });
+
+  window.addEventListener('resize', syncTopScrollWidth);
+}
+
+function effectiveCampaignName(target) {
+  const fields = state.accountFields[getTargetId(target)] || {};
+  return (fields.campaign_name || '').trim() || autoCampaignName(target);
+}
+
+async function copyText(text) {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (e) {
+    console.warn('clipboard write failed', e);
+  }
+
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.setAttribute('readonly', '');
+  ta.style.position = 'absolute';
+  ta.style.left = '-9999px';
+  document.body.appendChild(ta);
+  ta.select();
+  const ok = document.execCommand('copy');
+  document.body.removeChild(ta);
+  return ok;
+}
+
+window.copyCampaignName = async function(targetId) {
+  const target = findTargetById(targetId);
+  if (!target) return;
+  const ok = await copyText(effectiveCampaignName(target));
+  setStatus(ok ? `已复制 ${effectiveCampaignName(target)}` : '复制失败，请手动复制', ok ? 'success' : 'error');
+};
+
+function ensureBottomProgress() {
+  const controls = document.querySelector('.bottom-bar .controls');
+  if (!controls || document.getElementById('bottomProgressMeta')) return;
+
+  const meta = document.createElement('div');
+  meta.className = 'meta-pill';
+  meta.id = 'bottomProgressMeta';
+  meta.style.minWidth = '260px';
+  meta.style.flex = '1';
+  meta.innerHTML = `
+    <div class="meta-copy" style="min-width: 110px;">
+      <label></label>
+      <span id="bottomTaskInfo">加载中...</span>
+    </div>
+    <div style="flex:1;display:flex;flex-direction:column;gap:8px;">
+      <div id="bottomProgressLabel" style="font-size:12px;color:var(--text-on-dark);">总进度 0 / 0</div>
+      <div class="progress-wrap"><div class="progress-bar" id="bottomTotalProgress"></div></div>
+    </div>
+  `;
+  controls.appendChild(meta);
+}
+
+function renderNamingExamples() {
+  const list = document.getElementById('nameExampleList');
+  const hint = document.getElementById('namingHint');
+  if (!list || !taskInfo) return;
+
+  hint.textContent = `自动格式：${(state.baseName || '').trim() || '投手-渠道号-产品'}-${currentDateCode()}-A`;
+  list.innerHTML = '';
+
+  for (const target of getSortedTargets()) {
+    const targetId = getTargetId(target);
+    const item = document.createElement('div');
+    item.className = 'name-example';
+    item.innerHTML = `
+      <div class="meta">
+        <div class="label">${esc(target.account_name || target.account_id)} · 系列 ${esc(target.series_suffix || 'A')}</div>
+        <div class="value">${esc(effectiveCampaignName(target))}</div>
+      </div>
+      <button class="copy-btn" type="button" onclick="copyCampaignName('${targetId}')">复制</button>
+    `;
+    list.appendChild(item);
+  }
+}
+
+function updateAutoNameNotes() {
+  if (!taskInfo) return;
+  for (const target of taskInfo.targets) {
+    const targetId = getTargetId(target);
+    const input = document.getElementById(`campaign_name_${targetId}`);
+    const value = autoCampaignName(target);
+    if (input) input.placeholder = value;
+  }
+  renderNamingExamples();
+}
+
+function updateTaskSummary() {
+  if (!taskInfo) return;
+  const accountCount = new Set(taskInfo.targets.map((target) => target.account_id)).size;
+  const seriesCount = taskInfo.targets.length;
+  const text = `${accountCount} 个账户 · ${seriesCount} 个系列 · ${state.totalCells} 个素材位`;
+  const topInfo = document.getElementById('taskInfo');
+  const bottomInfo = document.getElementById('bottomTaskInfo');
+  if (topInfo) topInfo.textContent = text;
+  if (bottomInfo) bottomInfo.textContent = text;
+
+  const progressLabel = document.getElementById('bottomProgressLabel');
+  if (progressLabel) progressLabel.textContent = `总进度 ${state.doneCells} / ${state.totalCells}`;
+}
+
+window.loadTask = async function() {
+  try {
+    const resp = await fetch('/upload/info?task=' + taskId);
+    if (!resp.ok) {
+      document.body.innerHTML = '<div style="text-align:center;padding:60px;color:#999;">任务不存在或已过期</div>';
+      return;
+    }
+    taskInfo = await resp.json();
+  } catch (e) {
+    document.body.innerHTML = `<div style="text-align:center;padding:60px;color:#f5222d;">加载失败: ${esc(e.message)}</div>`;
+    return;
+  }
+
+  taskInfo.targets = [...(taskInfo.targets || [])].sort((a, b) => {
+    if (a.account_id === b.account_id) {
+      return (a.series_index || 0) - (b.series_index || 0);
+    }
+    return String(a.account_name || a.account_id).localeCompare(String(b.account_name || b.account_id), undefined, { sensitivity: 'base' });
+  });
+
+  state.count = taskInfo.count || 10;
+  state.baseName = taskInfo.base_name || '';
+  state.totalCells = taskInfo.targets.length * state.count;
+  state.doneCells = 0;
+  syncBaseNameInputs(state.baseName);
+  syncCountInputs(state.count);
+  ensureBottomProgress();
+
+  const metaLabel = document.querySelector('.bottom-bar .meta-copy label');
+  const metaText = document.querySelector('.bottom-bar .meta-copy span');
+  if (metaLabel) metaLabel.textContent = '';
+  if (metaText) metaText.textContent = '每个系列广告数量';
+
+  for (const target of taskInfo.targets) {
+    const targetId = getTargetId(target);
+    state.accountFields[targetId] = {
+      event: target.event || 'SUBSCRIBE',
+      landing_url: target.landing_url || '',
+      country: target.country || 'BR',
+      device: target.device || 'Android',
+      gender: typeof target.gender === 'number' ? target.gender : 0,
+      age_min: target.age_min || 18,
+      age_max: target.age_max || 65,
+      age_mode: (target.age_min === 18 || target.age_min === undefined) && (target.age_max === 65 || target.age_max === undefined) ? 'default' : 'custom',
+      budget: target.budget || 20,
+      budget_scope: target.budget_scope || 'campaign',
+      budget_type: target.budget_type || 'daily',
+      budget_amount: target.budget_amount || target.budget || 20,
+      title: target.title || '',
+      text: target.text || '',
+      campaign_name: target.campaign_name || '',
+      page_id: target.page_id || '',
+      pixel_id: target.pixel_id || '',
+      application_id: target.application_id || '',
+      object_store_url: target.object_store_url || '',
+      edited: new Set(),
+    };
+  }
+
+  state.doneCells = 0;
+  for (let i = 0; i < state.count; i++) {
+    const row = taskInfo.slots[i] || {};
+    for (const target of taskInfo.targets) {
+      const targetId = getTargetId(target);
+      const cell = row[targetId] || row[target.account_id] || { status: 'idle' };
+      state.cells[cellKey(i, targetId)] = {
+        status: cell.status || 'idle',
+        filename: cell.filename || '',
+        error: cell.error || '',
+      };
+      if (cell.status === 'done') state.doneCells++;
+    }
+  }
+
+  renderColumns();
+  updateProgress();
+  updatePublishBtn();
+  renderNamingExamples();
+
+  if (Array.isArray(taskInfo.results) && taskInfo.results.length) {
+    const box = document.getElementById('resultBox');
+    const list = document.getElementById('resultList');
+    box.classList.add('show');
+    list.innerHTML = '';
+    for (const result of taskInfo.results) {
+      const item = document.createElement('div');
+      item.className = 'result-item ' + (result.ok ? 'ok' : 'failed');
+      const suffix = result.series_suffix ? ` · 系列 ${result.series_suffix}` : '';
+      item.textContent = result.ok
+        ? `${result.account_name || result.account_id}${suffix} · ${result.campaign_name || ''} · 创建 ${result.ad_count || 0} 条广告`
+        : `${result.account_name || result.account_id}${suffix} · ${result.error || '未知错误'}`;
+      list.appendChild(item);
+    }
+  }
+};
+
+window.configCardHTML = function(target) {
+  const targetId = getTargetId(target);
+  const fields = state.accountFields[targetId];
+  const isAppInstall = isAppInstallEvent(fields.event);
+  const eventOptions = EVENTS.map((item) =>
+    `<option value="${item.value}" ${fields.event === item.value ? 'selected' : ''}>${item.label}</option>`
+  ).join('');
+  const countryInput = countryOptionsHTML(targetId, fields.country);
+  const deviceOptions = DEVICES.map((device) =>
+    `<option value="${device}" ${fields.device === device ? 'selected' : ''}>${device}</option>`
+  ).join('');
+  const genderOptions = GENDERS.map((item) =>
+    `<option value="${item.value}" ${fields.gender === item.value ? 'selected' : ''}>${item.label}</option>`
+  ).join('');
+  const budgetScopeOptions = [
+    { value: 'campaign', label: '自动分配' },
+    { value: 'adset', label: '广告组预算' },
+  ].map((item) =>
+    `<option value="${item.value}" ${fields.budget_scope === item.value ? 'selected' : ''}>${item.label}</option>`
+  ).join('');
+  const budgetTypeOptions = [
+    { value: 'daily', label: '单日预算' },
+    { value: 'lifetime', label: '总预算' },
+  ].map((item) =>
+    `<option value="${item.value}" ${fields.budget_type === item.value ? 'selected' : ''}>${item.label}</option>`
+  ).join('');
+  const ageMode = fields.age_mode || 'default';
+  const ageOptions = AGE_PRESETS.map((preset) =>
+    `<option value="${preset.value}" ${preset.value === ageMode ? 'selected' : ''}>${preset.label}</option>`
+  ).join('');
+  const customAgeBlock = ageMode === 'custom'
+    ? `
+    <div class="card-row row-2">
+      <div class="field">
+        <label>最小年龄</label>
+        <input type="text" inputmode="numeric" pattern="[0-9]*" id="age_min_${targetId}" value="${fields.age_min}" oninput="onAgeDraftInput('${targetId}','age_min')" onchange="onAgeCommit('${targetId}')">
+      </div>
+      <div class="field">
+        <label>最大年龄</label>
+        <input type="text" inputmode="numeric" pattern="[0-9]*" id="age_max_${targetId}" value="${fields.age_max}" oninput="onAgeDraftInput('${targetId}','age_max')" onchange="onAgeCommit('${targetId}')">
+      </div>
+    </div>
+    `
+    : '';
+  const pageOptions = (target.available_pages || []).map((page) =>
+    `<option value="${page.id}" ${fields.page_id === page.id ? 'selected' : ''}>${esc(page.name)} (${page.id})</option>`
+  ).join('');
+  const pixelOptions = (target.available_pixels || []).map((pixel) =>
+    `<option value="${pixel.id}" ${fields.pixel_id === pixel.id ? 'selected' : ''}>${esc(pixel.name)} (${pixel.id})</option>`
+  ).join('');
+  const destinationBlock = isAppInstall
+    ? `
+    <div class="card-row">
+      <div class="field">
+        <label>应用 ID</label>
+        <input type="text" id="application_id_${targetId}" value="${esc(fields.application_id)}" placeholder="123456789012345" oninput="onFieldChange('${targetId}','application_id')">
+      </div>
+    </div>
+
+    <div class="card-row">
+      <div class="field">
+        <label>应用商店 URL</label>
+        <input type="url" id="object_store_url_${targetId}" value="${esc(fields.object_store_url)}" placeholder="https://play.google.com/store/apps/details?id=..." oninput="onFieldChange('${targetId}','object_store_url')">
+      </div>
+    </div>
+    `
+    : `
+    <div class="card-row">
+      <div class="field">
+        <label>像素</label>
+        <select id="pixel_id_${targetId}" onchange="onFieldChange('${targetId}','pixel_id')"><option value="">请选择</option>${pixelOptions}</select>
+      </div>
+    </div>
+
+    <div class="card-row">
+      <div class="field">
+        <label>URL</label>
+        <input type="url" id="landing_url_${targetId}" value="${esc(fields.landing_url)}" placeholder="https://..." oninput="onFieldChange('${targetId}','landing_url')">
+      </div>
+    </div>
+    `;
+
+  return `
+    <div class="card-head">
+      <div class="card-head-copy">
+        <span class="section-kicker">账户配置</span>
+        <h4>${esc(target.account_name || target.account_id)}</h4>
+        <span class="alias">系列 ${esc(target.series_suffix || 'A')} / ${esc(String(target.series_total || 1))} · ${esc(target.account_alias || target.account_id.slice(-6))}</span>
+      </div>
+    </div>
+
+    <div class="card-row">
+      <div class="field">
+        <label>系列名称</label>
+        <input type="text" id="campaign_name_${targetId}" value="${esc(fields.campaign_name)}" placeholder="${esc(autoCampaignName(target))}" oninput="onFieldChange('${targetId}','campaign_name')">
+      </div>
+    </div>
+
+
+    <div class="card-row">
+      <div class="field">
+        <label>转化事件</label>
+        <select id="event_${targetId}" onchange="onFieldChange('${targetId}','event')">${eventOptions}</select>
+      </div>
+    </div>
+
+    <div class="card-row">
+      <div class="field">
+        <label>公共主页</label>
+        <select id="page_id_${targetId}" onchange="onFieldChange('${targetId}','page_id')"><option value="">请选择</option>${pageOptions}</select>
+      </div>
+    </div>
+
+    ${destinationBlock}
+
+    <div class="card-row row-2">
+      <div class="field">
+        <label>国家</label>
+        ${countryInput}
+      </div>
+      <div class="field">
+        <label>设备</label>
+        <select id="device_${targetId}" onchange="onFieldChange('${targetId}','device')">${deviceOptions}</select>
+      </div>
+    </div>
+
+    <div class="card-row row-2">
+      <div class="field">
+        <label>预算方式</label>
+        <select id="budget_scope_${targetId}" onchange="onFieldChange('${targetId}','budget_scope')">${budgetScopeOptions}</select>
+      </div>
+      <div class="field">
+        <label>预算周期</label>
+        <select id="budget_type_${targetId}" onchange="onFieldChange('${targetId}','budget_type')">${budgetTypeOptions}</select>
+      </div>
+    </div>
+
+    <div class="card-row">
+      <div class="field">
+        <label>预算金额 ($)</label>
+        <input type="number" id="budget_amount_${targetId}" min="1" step="1" value="${fields.budget_amount}" oninput="onFieldChange('${targetId}','budget_amount')">
+        <div class="field-note">当前模式下，预算会由 Meta 自动分配，不会平均拆到每条广告。</div>
+      </div>
+    </div>
+
+    <div class="card-row row-2">
+      <div class="field">
+        <label>性别</label>
+        <select id="gender_${targetId}" onchange="onFieldChange('${targetId}','gender')">${genderOptions}</select>
+      </div>
+      <div class="field">
+        <label>年龄</label>
+        <select id="age_preset_${targetId}" onchange="onAgePresetChange('${targetId}', this.value)">${ageOptions}</select>
+      </div>
+    </div>
+
+    ${customAgeBlock}
+
+    <div class="card-row">
+      <div class="field">
+        <label>广告标题</label>
+        <input type="text" id="title_${targetId}" value="${esc(fields.title)}" placeholder="输入标题..." oninput="onFieldChange('${targetId}','title')">
+      </div>
+    </div>
+
+    <div class="card-row">
+      <div class="field">
+        <label>广告文案</label>
+        <textarea id="text_${targetId}" placeholder="输入广告正文..." oninput="onFieldChange('${targetId}','text')">${esc(fields.text)}</textarea>
+      </div>
+    </div>
+  `;
+};
+
+window.renderColumns = function() {
+  const container = document.getElementById('columnsContainer');
+  container.innerHTML = '';
+  document.documentElement.style.setProperty('--acc-count', String(getSortedTargets().length || 1));
+
+  for (const target of getSortedTargets()) {
+    const targetId = getTargetId(target);
+    const col = document.createElement('div');
+    col.className = 'account-column';
+    col.id = 'col_' + targetId;
+
+    const drop = document.createElement('div');
+    drop.className = 'col-drop-zone';
+    drop.innerHTML = `
+      <div class="icon">↑</div>
+      <div>拖文件到 <strong>${esc(target.account_name || target.account_id)} · 系列 ${esc(target.series_suffix || 'A')}</strong></div>
+      <div class="sub">或点击选择文件 / 文件夹</div>
+      <input type="file" id="fileinput_${targetId}" multiple accept="video/*,image/*" style="display:none">
+    `;
+    drop.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      drop.classList.add('dragover');
+    });
+    drop.addEventListener('dragleave', () => drop.classList.remove('dragover'));
+    drop.addEventListener('drop', (e) => onDropColumn(e, targetId));
+    drop.addEventListener('click', () => document.getElementById('fileinput_' + targetId).click());
+    col.appendChild(drop);
+
+    setTimeout(() => {
+      const input = document.getElementById('fileinput_' + targetId);
+      if (input) input.addEventListener('change', (e) => onFilesPickedColumn(e, targetId));
+    }, 0);
+
+    const card = document.createElement('div');
+    card.className = 'config-card';
+    card.id = 'config_' + targetId;
+    card.innerHTML = configCardHTML(target);
+    col.appendChild(card);
+
+    const header = document.createElement('div');
+    header.className = 'slots-list-header';
+    header.id = 'slots_header_' + targetId;
+    header.textContent = `素材 0 / ${state.count}`;
+    col.appendChild(header);
+
+    const list = document.createElement('div');
+    list.className = 'slots-list';
+    list.id = 'slots_' + targetId;
+    col.appendChild(list);
+
+    container.appendChild(col);
+    renderSlotList(targetId);
+  }
+
+  bindTopScrollSync();
+  syncTopScrollWidth();
+  updateSlotsHeaders();
+  updateAutoNameNotes();
+};
+
+window.configCardHTML_legacy_unused = function(target) {
+  const targetId = getTargetId(target);
+  const fields = state.accountFields[targetId];
+  const eventOptions = EVENTS.map((item) =>
+    `<option value="${item.value}" ${fields.event === item.value ? 'selected' : ''}>${item.label}</option>`
+  ).join('');
+  const countryOptions = COUNTRIES.map((code) =>
+    `<option value="${code}" ${fields.country === code ? 'selected' : ''}>${code} ${COUNTRY_NAMES[code] || ''}</option>`
+  ).join('');
+  const deviceOptions = DEVICES.map((device) =>
+    `<option value="${device}" ${fields.device === device ? 'selected' : ''}>${device}</option>`
+  ).join('');
+  const genderOptions = GENDERS.map((item) =>
+    `<option value="${item.value}" ${fields.gender === item.value ? 'selected' : ''}>${item.label}</option>`
+  ).join('');
+  const agePresetIdx = AGE_PRESETS.findIndex((preset) => preset.min === fields.age_min && preset.max === fields.age_max);
+  const ageOptions = AGE_PRESETS.map((preset, idx) =>
+    `<option value="${idx}" ${idx === agePresetIdx ? 'selected' : ''}>${preset.label}</option>`
+  ).join('');
+  const pageOptions = (target.available_pages || []).map((page) =>
+    `<option value="${page.id}" ${fields.page_id === page.id ? 'selected' : ''}>${esc(page.name)} (${page.id})</option>`
+  ).join('');
+  const pixelOptions = (target.available_pixels || []).map((pixel) =>
+    `<option value="${pixel.id}" ${fields.pixel_id === pixel.id ? 'selected' : ''}>${esc(pixel.name)} (${pixel.id})</option>`
+  ).join('');
+
+  return `
+    <div class="card-head">
+      <div class="card-head-copy">
+        <span class="section-kicker">账户配置</span>
+        <h4>${esc(target.account_name || target.account_id)}</h4>
+        <span class="alias">系列 ${esc(target.series_suffix || 'A')} / ${esc(String(target.series_total || 1))} · ${esc(target.account_alias || target.account_id.slice(-6))}</span>
+      </div>
+      <span class="id">act_${esc(target.account_id)}</span>
+    </div>
+
+    <div class="card-row">
+      <div class="field">
+        <label>系列名称</label>
+        <input type="text" id="campaign_name_${targetId}" value="${esc(fields.campaign_name)}" placeholder="${esc(autoCampaignName(target))}" oninput="onFieldChange('${targetId}','campaign_name')">
+      </div>
+    </div>
+
+    <div class="card-row">
+      <div class="field">
+        <label>转化事件</label>
+        <select id="event_${targetId}" onchange="onFieldChange('${targetId}','event')">${eventOptions}</select>
+      </div>
+    </div>
+
+    <div class="card-row">
+      <div class="field">
+        <label>公共主页</label>
+        <select id="page_id_${targetId}" onchange="onFieldChange('${targetId}','page_id')"><option value="">请选择</option>${pageOptions}</select>
+      </div>
+    </div>
+
+    <div class="card-row">
+      <div class="field">
+        <label>像素</label>
+        <select id="pixel_id_${targetId}" onchange="onFieldChange('${targetId}','pixel_id')"><option value="">请选择</option>${pixelOptions}</select>
+      </div>
+    </div>
+
+    <div class="card-row">
+      <div class="field">
+        <label>URL</label>
+        <input type="url" id="landing_url_${targetId}" value="${esc(fields.landing_url)}" placeholder="https://..." oninput="onFieldChange('${targetId}','landing_url')">
+      </div>
+    </div>
+
+    <div class="card-row row-2">
+      <div class="field">
+        <label>国家</label>
+        <select id="country_${targetId}" onchange="onFieldChange('${targetId}','country')">${countryOptions}</select>
+      </div>
+      <div class="field">
+        <label>设备</label>
+        <select id="device_${targetId}" onchange="onFieldChange('${targetId}','device')">${deviceOptions}</select>
+      </div>
+    </div>
+
+    <div class="card-row row-2">
+      <div class="field">
+        <label>性别</label>
+        <select id="gender_${targetId}" onchange="onFieldChange('${targetId}','gender')">${genderOptions}</select>
+      </div>
+      <div class="field">
+        <label>年龄</label>
+        <select id="age_preset_${targetId}" onchange="onAgePresetChange('${targetId}', this.value)">${ageOptions}</select>
+      </div>
+    </div>
+
+    <div class="card-row">
+      <div class="field">
+        <label>日预算 ($)</label>
+        <input type="number" id="budget_${targetId}" min="1" step="1" value="${fields.budget}" oninput="onFieldChange('${targetId}','budget')">
+      </div>
+    </div>
+
+    <div class="card-row">
+      <div class="field">
+        <label>广告标题</label>
+        <input type="text" id="title_${targetId}" value="${esc(fields.title)}" placeholder="输入标题..." oninput="onFieldChange('${targetId}','title')">
+      </div>
+    </div>
+
+    <div class="card-row">
+      <div class="field">
+        <label>广告文案</label>
+        <textarea id="text_${targetId}" placeholder="输入广告正文..." oninput="onFieldChange('${targetId}','text')">${esc(fields.text)}</textarea>
+      </div>
+    </div>
+  `;
+};
+
+window.renderSlotList = function(targetId) {
+  const list = document.getElementById('slots_' + targetId);
+  if (!list) return;
+  list.innerHTML = '';
+  for (let i = 0; i < state.count; i++) {
+    const item = document.createElement('div');
+    item.id = `slot_${i}_${targetId}`;
+    renderSlot(i, targetId, item);
+    list.appendChild(item);
+  }
+};
+
+window.renderSlot = function(slotIdx, targetId, el) {
+  const key = cellKey(slotIdx, targetId);
+  const cell = state.cells[key] || { status: 'idle' };
+  const file = state.cellFiles[key];
+  const previewURL = state.cellPreviews[key];
+  el.className = 'slot-item ' + cell.status;
+
+  if (cell.status === 'idle') {
+    el.innerHTML = `
+      <div class="slot-idx">${slotIdx + 1}</div>
+      <div class="info"><div class="name" style="color:var(--text-faint)">空位</div></div>
+    `;
+    return;
+  }
+
+  let previewTag = '';
+  if (file && previewURL) {
+    previewTag = isVideo(file)
+      ? `<video class="preview" src="${previewURL}#t=0.1" preload="metadata" muted playsinline></video>`
+      : `<img class="preview" src="${previewURL}" alt="">`;
+  } else {
+    previewTag = `<div class="preview" style="display:flex;align-items:center;justify-content:center;color:#fff;font-size:9px">${esc(cell.filename || '').slice(0, 16)}</div>`;
+  }
+
+  let statusText = '';
+  let action = '';
+  if (cell.status === 'queued') statusText = '排队中';
+  else if (cell.status === 'uploading') statusText = `上传中${cell.progress || ''}`;
+  else if (cell.status === 'done') {
+    statusText = '完成';
+    action = `<button class="clear-cell-btn" onclick="event.stopPropagation();clearCell(${slotIdx},'${targetId}')">×</button>`;
+  } else if (cell.status === 'failed') {
+    statusText = cell.error || '失败';
+    action = `<button class="retry-btn" onclick="event.stopPropagation();retryCell(${slotIdx},'${targetId}')">重试</button>`;
+  }
+
+  el.innerHTML = `
+    <div class="slot-idx">${slotIdx + 1}</div>
+    ${previewTag}
+    <div class="info">
+      <div class="name">${esc(file?.name || cell.filename || '')}</div>
+      <div class="status">${esc(statusText)}</div>
+    </div>
+    <div class="slot-action">${action}</div>
+  `;
+};
+
+window.updateSlotsHeaders = function() {
+  if (!taskInfo) return;
+  for (const target of taskInfo.targets) {
+    const targetId = getTargetId(target);
+    const header = document.getElementById('slots_header_' + targetId);
+    if (!header) continue;
+    let filled = 0;
+    for (let i = 0; i < state.count; i++) {
+      if (state.cells[cellKey(i, targetId)]?.status === 'done') filled++;
+    }
+    header.textContent = `素材 ${filled} / ${state.count}`;
+  }
+};
+
+function syncFieldWithinAccount(targetId, field, value) {
+  if (!TARGET_SYNC_FIELDS.includes(field)) return;
+  syncFieldsToOtherTargets(targetId, { [field]: value });
+}
+
+window.onCountryInput = function(targetId) {
+  const fields = state.accountFields[targetId];
+  const el = document.getElementById(`country_${targetId}`);
+  if (!fields || !el) return;
+
+  const raw = (el.value || '').trim();
+  let matched = '';
+  if (raw) {
+    const upper = raw.toUpperCase();
+    if (COUNTRIES.includes(upper)) matched = upper;
+    else matched = COUNTRIES.find((code) => countryLabel(code) === raw) || '';
+  }
+
+  if (!matched) return;
+  fields.country = matched;
+  fields.edited.add('country');
+  el.value = countryLabel(matched);
+  syncFieldWithinAccount(targetId, 'country', matched);
+  scheduleSaveConfig();
+};
+
+window.onAgeDraftInput = function(targetId, field) {
+  const fields = state.accountFields[targetId];
+  const el = document.getElementById(`${field}_${targetId}`);
+  if (!fields || !el) return;
+  fields.age_mode = 'custom';
+  fields[field] = el.value;
+};
+
+window.onAgeCommit = function(targetId) {
+  const fields = state.accountFields[targetId];
+  const ageMinEl = document.getElementById(`age_min_${targetId}`);
+  const ageMaxEl = document.getElementById(`age_max_${targetId}`);
+  if (!fields || !ageMinEl || !ageMaxEl) return;
+
+  fields.age_mode = 'custom';
+  const nextMin = Math.max(13, Math.min(65, parseInt(ageMinEl.value, 10) || 13));
+  const nextMax = Math.max(nextMin, Math.min(65, parseInt(ageMaxEl.value, 10) || nextMin));
+  fields.age_min = nextMin;
+  fields.age_max = nextMax;
+  ageMinEl.value = nextMin;
+  ageMaxEl.value = nextMax;
+  fields.edited.add('age_mode');
+  fields.edited.add('age_min');
+  fields.edited.add('age_max');
+  syncFieldsToOtherTargets(targetId, {
+    age_mode: fields.age_mode,
+    age_min: fields.age_min,
+    age_max: fields.age_max,
+  });
+  scheduleSaveConfig();
+};
+
+window.onFieldChange = function(targetId, field) {
+  const fields = state.accountFields[targetId];
+  const el = document.getElementById(`${field}_${targetId}`);
+  if (!fields || !el) return;
+
+  let value = el.value;
+  if (field === 'gender') value = parseInt(value, 10) || 0;
+  else if (field === 'budget' || field === 'budget_amount') value = parseFloat(value) || 0;
+
+  fields[field] = value;
+  if (field === 'budget_amount') fields.budget = value;
+  fields.edited.add(field);
+
+  syncFieldWithinAccount(targetId, field, value);
+
+  if (field === 'event') {
+    rerenderTargetCard(targetId);
+  }
+
+  if (field === 'campaign_name') renderNamingExamples();
+  scheduleSaveConfig();
+};
+
+window.onAgePresetChange = function(targetId, idxStr) {
+  const fields = state.accountFields[targetId];
+  if (idxStr === 'default') {
+    fields.age_mode = 'default';
+    fields.age_min = 18;
+    fields.age_max = 65;
+  } else if (idxStr === 'custom') {
+    fields.age_mode = 'custom';
+  } else {
+    return;
+  }
+  fields.edited.add('age_mode');
+  fields.edited.add('age_min');
+  fields.edited.add('age_max');
+  syncFieldsToOtherTargets(targetId, {
+    age_mode: fields.age_mode,
+    age_min: fields.age_min,
+    age_max: fields.age_max,
+  });
+  rerenderTargetCard(targetId);
+  if (fields.age_mode === 'custom') {
+    requestAnimationFrame(() => {
+      const input = document.getElementById(`age_min_${targetId}`);
+      if (input) {
+        input.focus();
+        input.select();
+      }
+    });
+  }
+  scheduleSaveConfig();
+};
+
+window.onNamingBaseInput = function() {
+  state.baseName = getBaseNameInput()?.value || '';
+  syncBaseNameInputs(state.baseName);
+  updateAutoNameNotes();
+  scheduleSaveConfig();
+};
+
+window.onGlobalChange = function(what) {
+  if (!taskInfo) return;
+
+  if (what === 'base_name') {
+    onNamingBaseInput();
+    return;
+  }
+
+  if (what === 'count') {
+    const input = getCountInput();
+    const digits = String(input?.value || '').replace(/\D+/g, '').slice(0, 2);
+    if (input) input.value = digits;
+    clearTimeout(state.countApplyTimer);
+    state.countApplyTimer = setTimeout(() => {
+      const nextCount = Math.max(1, Math.min(50, parseInt(digits || '10', 10)));
+      const oldCount = state.count;
+      state.count = nextCount;
+      state.totalCells = taskInfo.targets.length * nextCount;
+      syncCountInputs(nextCount);
+
+      if (nextCount > oldCount) {
+        for (let i = oldCount; i < nextCount; i++) {
+          for (const target of taskInfo.targets) {
+            state.cells[cellKey(i, getTargetId(target))] = { status: 'idle' };
+          }
+        }
+      } else if (nextCount < oldCount) {
+        for (let i = nextCount; i < oldCount; i++) {
+          for (const target of taskInfo.targets) {
+            const key = cellKey(i, getTargetId(target));
+            if (state.cellPreviews[key]) {
+              URL.revokeObjectURL(state.cellPreviews[key]);
+              delete state.cellPreviews[key];
+            }
+            delete state.cellFiles[key];
+            if (state.cells[key]?.status === 'done') state.doneCells--;
+            delete state.cells[key];
+          }
+        }
+      }
+
+      taskInfo.count = nextCount;
+      for (const target of taskInfo.targets) renderSlotList(getTargetId(target));
+      updateSlotsHeaders();
+      updateProgress();
+      updatePublishBtn();
+      scheduleSaveConfig();
+    }, 2000);
+  }
+};
+
+window.saveConfigToServer = async function() {
+  if (!taskInfo) return;
+  const body = {
+    count: state.count,
+    base_name: state.baseName,
+    targets: taskInfo.targets.map((target) => {
+      const targetId = getTargetId(target);
+      const fields = state.accountFields[targetId];
+      return {
+        target_id: targetId,
+        campaign_name: fields.campaign_name,
+        page_id: fields.page_id,
+        pixel_id: fields.pixel_id,
+        event: fields.event,
+        landing_url: fields.landing_url,
+        application_id: fields.application_id,
+        object_store_url: fields.object_store_url,
+        country: fields.country,
+        device: fields.device,
+        gender: fields.gender,
+        age_min: fields.age_min,
+        age_max: fields.age_max,
+        budget: fields.budget_amount,
+        budget_scope: fields.budget_scope,
+        budget_type: fields.budget_type,
+        budget_amount: fields.budget_amount,
+        title: fields.title,
+        text: fields.text,
+      };
+    }),
+  };
+  try {
+    await fetch('/upload/config?task=' + taskId, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch (e) {
+    console.warn('save config failed', e);
+  }
+};
+
+window.updateProgress = function() {
+  const pct = state.totalCells > 0 ? (state.doneCells / state.totalCells * 100) : 0;
+  const topBar = document.getElementById('totalProgress');
+  const bottomBar = document.getElementById('bottomTotalProgress');
+  const topLabel = document.getElementById('progressLabel');
+  const bottomLabel = document.getElementById('bottomProgressLabel');
+  if (topBar) topBar.style.width = pct + '%';
+  if (bottomBar) bottomBar.style.width = pct + '%';
+  if (topLabel) topLabel.textContent = `总进度 ${state.doneCells} / ${state.totalCells}`;
+  if (bottomLabel) bottomLabel.textContent = `总进度 ${state.doneCells} / ${state.totalCells}`;
+  updateTaskSummary();
+};
+
+window.updatePublishBtn = function() {
+  const btn = document.getElementById('publishBtn');
+  if (!btn || !taskInfo) return;
+  let canPublish = true;
+  for (const target of taskInfo.targets) {
+    const targetId = getTargetId(target);
+    let hasMedia = false;
+    for (let i = 0; i < state.count; i++) {
+      if (state.cells[cellKey(i, targetId)]?.status === 'done') {
+        hasMedia = true;
+        break;
+      }
+    }
+    if (!hasMedia) {
+      canPublish = false;
+      break;
+    }
+  }
+  btn.disabled = !canPublish || !!taskInfo.published;
+  if (taskInfo.published) btn.textContent = '已全部发布';
+  else if (canPublish) btn.textContent = `一键创建并发布 ${taskInfo.targets.length} 个系列`;
+  else btn.textContent = '至少每个系列上传 1 个素材才能发布';
+};
+
+window.onDropColumn = async function(e, targetId) {
+  e.preventDefault();
+  const zone = e.currentTarget;
+  zone.classList.remove('dragover');
+
+  let files = [];
+  const items = e.dataTransfer.items;
+  if (items && items.length && typeof items[0].webkitGetAsEntry === 'function') {
+    const entries = [];
+    for (let i = 0; i < items.length; i++) {
+      const entry = items[i].webkitGetAsEntry();
+      if (entry) entries.push(entry);
+    }
+    for (const entry of entries) await walkEntry(entry, files);
+  } else {
+    files = [...e.dataTransfer.files];
+  }
+
+  assignBatchToColumn(targetId, sortFiles(filterMedia(files)));
+};
+
+window.onFilesPickedColumn = function(e, targetId) {
+  assignBatchToColumn(targetId, sortFiles(filterMedia([...e.target.files])));
+  e.target.value = '';
+};
+
+window.assignBatchToColumn = function(targetId, files) {
+  if (!files.length) {
+    setStatus('没有找到可上传的图片或视频', 'error');
+    return;
+  }
+  let assigned = 0;
+  for (const file of files) {
+    let slotIdx = -1;
+    for (let i = 0; i < state.count; i++) {
+      const cell = state.cells[cellKey(i, targetId)] || { status: 'idle' };
+      if (cell.status === 'idle') {
+        slotIdx = i;
+        break;
+      }
+    }
+    if (slotIdx < 0) break;
+    assignCell(slotIdx, targetId, file);
+    assigned++;
+  }
+  const target = findTargetById(targetId);
+  if (assigned === 0) {
+    setStatus('这个系列的素材位已经满了，请先清空或增加广告数量', 'error');
+  } else {
+    setStatus(`已向 ${target?.account_name || targetId} · 系列 ${target?.series_suffix || 'A'} 分配 ${assigned} 个素材`, 'success');
+  }
+};
+
+window.assignCell = function(slotIdx, targetId, file) {
+  const key = cellKey(slotIdx, targetId);
+  const token = nextUploadToken(slotIdx, targetId);
+  if (state.cellPreviews[key]) URL.revokeObjectURL(state.cellPreviews[key]);
+  state.cellFiles[key] = file;
+  state.cellPreviews[key] = URL.createObjectURL(file);
+  setCellStatus(slotIdx, targetId, 'queued', { filename: file.name, error: '', progress: '' });
+  uploadPool.add(() => uploadCell(slotIdx, targetId, file, token));
+};
+
+window.uploadCell = async function(slotIdx, targetId, file, token) {
+  for (let attempt = 1; attempt <= UPLOAD_MAX_ATTEMPTS; attempt++) {
+    if (!isActiveUploadToken(slotIdx, targetId, token)) return;
+
+    setCellStatus(slotIdx, targetId, 'uploading', {
+      filename: file.name,
+      progress: attempt === 1 ? '' : ` (自动重试 ${attempt}/${UPLOAD_MAX_ATTEMPTS})`,
+      error: '',
+    });
+
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+      const resp = await fetch(
+        `/upload/file?task=${taskId}&slot=${slotIdx}&target=${encodeURIComponent(targetId)}`,
+        { method: 'POST', body: fd }
+      );
+      const data = await parseApiResponse(resp);
+      if (!isActiveUploadToken(slotIdx, targetId, token)) return;
+      if (data.ok) {
+        setCellStatus(slotIdx, targetId, 'done');
+        return;
+      }
+      throw new Error(data.error || 'Unknown error');
+    } catch (e) {
+      if (!isActiveUploadToken(slotIdx, targetId, token)) return;
+      if (attempt < UPLOAD_MAX_ATTEMPTS && isRetryableUploadError(e)) {
+        const backoff = (UPLOAD_RETRY_BASE_MS * (2 ** (attempt - 1))) + Math.floor(Math.random() * 250);
+        await sleep(backoff);
+        continue;
+      }
+      setCellStatus(slotIdx, targetId, 'failed', { error: e.message });
+      return;
+    }
+  }
+};
+
+window.clearCell = async function(slotIdx, targetId) {
+  nextUploadToken(slotIdx, targetId);
+  try {
+    const resp = await fetch(
+      `/upload/clear?task=${taskId}&slot=${slotIdx}&target=${encodeURIComponent(targetId)}`,
+      { method: 'POST' }
+    );
+    const data = await parseApiResponse(resp);
+    if (data.ok) {
+      const key = cellKey(slotIdx, targetId);
+      if (state.cellPreviews[key]) {
+        URL.revokeObjectURL(state.cellPreviews[key]);
+        delete state.cellPreviews[key];
+      }
+      delete state.cellFiles[key];
+      setCellStatus(slotIdx, targetId, 'idle', { filename: '', error: '', progress: '' });
+    }
+  } catch (e) {
+    setStatus('清除失败: ' + e.message, 'error');
+  }
+};
+
+window.retryCell = async function(slotIdx, targetId) {
+  const key = cellKey(slotIdx, targetId);
+  const file = state.cellFiles[key];
+  if (!file) {
+    setStatus('这个素材已经失效，请重新拖入文件', 'error');
+    return;
+  }
+  const token = nextUploadToken(slotIdx, targetId);
+  setCellStatus(slotIdx, targetId, 'queued', { filename: file.name, error: '', progress: '' });
+  uploadPool.add(() => uploadCell(slotIdx, targetId, file, token));
+};
+
+window.publish = async function() {
+  const btn = document.getElementById('publishBtn');
+  btn.disabled = true;
+  setStatus('正在保存配置...');
+  await saveConfigToServer();
+  setStatus('正在创建 campaign / adset 并发布到所有系列...');
+
+  try {
+    const resp = await fetch('/upload/publish?task=' + taskId, { method: 'POST' });
+    const data = await parseApiResponse(resp);
+    const results = data.results || [];
+    const okCount = results.filter((item) => item.ok).length;
+    const failCount = results.length - okCount;
+    taskInfo.published = !!data.ok;
+    taskInfo.results = results;
+
+    const box = document.getElementById('resultBox');
+    const list = document.getElementById('resultList');
+    box.classList.add('show');
+    list.innerHTML = '';
+    for (const result of results) {
+      const item = document.createElement('div');
+      item.className = 'result-item ' + (result.ok ? 'ok' : 'failed');
+      const suffix = result.series_suffix ? ` · 系列 ${result.series_suffix}` : '';
+      item.textContent = result.ok
+        ? `${result.account_name || result.account_id}${suffix} · ${result.campaign_name || ''} · 创建 ${result.ad_count || 0} 条广告`
+        : `${result.account_name || result.account_id}${suffix} · ${result.error || '未知错误'}`;
+      list.appendChild(item);
+    }
+
+    setStatus(`发布完成：${okCount} 个成功，${failCount} 个失败`, failCount > 0 ? 'error' : 'success');
+    if (failCount > 0) {
+      btn.disabled = false;
+      btn.textContent = '重试发布失败项';
+    } else {
+      btn.textContent = '已全部发布';
+    }
+  } catch (e) {
+    setStatus('发布请求失败: ' + e.message, 'error');
+    btn.disabled = false;
+  }
+};
+
+// ══════════════════════════════════════════════════════════════════
+// 启动
+// ══════════════════════════════════════════════════════════════════
+if (taskId) loadTask();
+</script>
+</body>
+</html>
